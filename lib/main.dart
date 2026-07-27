@@ -1,7 +1,6 @@
-import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -14,110 +13,457 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AI-Powered Personal Finance & Crypto Tracker',
+      title: 'Personal Finance & Crypto Tracker',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
         brightness: Brightness.dark,
+        primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(),
+      home: const BudgetAdvisor(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key}) : super(key: key);
+class BudgetAdvisor extends StatefulWidget {
+  const BudgetAdvisor({Key? key}) : super(key: key);
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<BudgetAdvisor> createState() => _BudgetAdvisorState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _BudgetAdvisorState extends State<BudgetAdvisor> {
   int _currentIndex = 0;
-  double _totalNetWorth = 0;
+  double _monthlySalary = 0;
   double _monthlyIncome = 0;
   double _monthlyExpenses = 0;
-  List<Transaction> _transactions = [];
-  List<Crypto> _cryptos = [];
+  double _netWorth = 0;
+  List<Map<String, dynamic>> _transactions = [];
+  List<Map<String, dynamic>> _cryptoPrices = [];
+
+  Future<void> _fetchCryptoPrices() async {
+    final response = await http.get(Uri.parse('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false'));
+    if (response.statusCode == 200) {
+      setState(() {
+        _cryptoPrices = jsonDecode(response.body);
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to fetch crypto prices')));
+    }
+  }
+
+  Future<void> _saveTransaction(Map<String, dynamic> transaction) async {
+    final prefs = await SharedPreferences.getInstance();
+    final transactionsJson = prefs.getString('transactions');
+    if (transactionsJson != null) {
+      final transactions = jsonDecode(transactionsJson);
+      transactions.add(transaction);
+      await prefs.setString('transactions', jsonEncode(transactions));
+    } else {
+      await prefs.setString('transactions', jsonEncode([transaction]));
+    }
+    _loadTransactions();
+  }
 
   Future<void> _loadTransactions() async {
     final prefs = await SharedPreferences.getInstance();
     final transactionsJson = prefs.getString('transactions');
     if (transactionsJson != null) {
-      final transactions = jsonDecode(transactionsJson);
       setState(() {
-        _transactions = transactions
-            .map((transaction) => Transaction.fromJson(transaction))
-            .toList();
-        _calculateNetWorth();
+        _transactions = jsonDecode(transactionsJson);
+        _monthlyIncome = 0;
+        _monthlyExpenses = 0;
+        for (final transaction in _transactions) {
+          if (transaction['type'] == 'income') {
+            _monthlyIncome += transaction['amount'];
+          } else {
+            _monthlyExpenses += transaction['amount'];
+          }
+        }
+        _netWorth = _monthlyIncome - _monthlyExpenses;
       });
     }
   }
 
-  Future<void> _saveTransactions() async {
+  Future<void> _deleteTransaction(int index) async {
     final prefs = await SharedPreferences.getInstance();
-    final transactionsJson = jsonEncode(_transactions);
-    await prefs.setString('transactions', transactionsJson);
+    final transactionsJson = prefs.getString('transactions');
+    if (transactionsJson != null) {
+      final transactions = jsonDecode(transactionsJson);
+      transactions.removeAt(index);
+      await prefs.setString('transactions', jsonEncode(transactions));
+      _loadTransactions();
+    }
   }
 
-  void _calculateNetWorth() {
-    _totalNetWorth = 0;
-    _monthlyIncome = 0;
-    _monthlyExpenses = 0;
-    for (final transaction in _transactions) {
-      if (transaction.type == 'income') {
-        _totalNetWorth += transaction.amount;
-        _monthlyIncome += transaction.amount;
-      } else if (transaction.type == 'expense') {
-        _totalNetWorth -= transaction.amount;
-        _monthlyExpenses += transaction.amount;
-      }
-    }
-    setState(() {});
+  void _showAddTransactionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final _formKey = GlobalKey<FormState>();
+        final _amountController = TextEditingController();
+        final _descriptionController = TextEditingController();
+        String _type = 'income';
+        return AlertDialog(
+          title: const Text('Add Transaction'),
+          content: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _amountController,
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter an amount';
+                    }
+                    return null;
+                  },
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a description';
+                    }
+                    return null;
+                  },
+                ),
+                Row(
+                  children: [
+                    Radio(
+                      value: 'income',
+                      groupValue: _type,
+                      onChanged: (value) {
+                        setState(() {
+                          _type = value as String;
+                        });
+                      },
+                    ),
+                    const Text('Income'),
+                    Radio(
+                      value: 'expense',
+                      groupValue: _type,
+                      onChanged: (value) {
+                        setState(() {
+                          _type = value as String;
+                        });
+                      },
+                    ),
+                    const Text('Expense'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Add'),
+              onPressed: () {
+                if (_formKey.currentState!.validate()) {
+                  _saveTransaction({
+                    'amount': double.parse(_amountController.text),
+                    'description': _descriptionController.text,
+                    'type': _type,
+                  });
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  Future<void> _fetchCryptos() async {
-    try {
-      final response = await http.get(Uri.parse('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false'));
-      if (response.statusCode == 200) {
-        final cryptosJson = jsonDecode(response.body);
-        setState(() {
-          _cryptos = cryptosJson.map((cryptoJson) => Crypto.fromJson(cryptoJson)).toList();
-        });
-      } else {
-        print('Failed to load cryptos');
-      }
-    } catch (e) {
-      print('Failed to load cryptos: $e');
-    }
+  void _showEditTransactionDialog(int index) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final _formKey = GlobalKey<FormState>();
+        final _amountController = TextEditingController(text: _transactions[index]['amount'].toString());
+        final _descriptionController = TextEditingController(text: _transactions[index]['description']);
+        String _type = _transactions[index]['type'];
+        return AlertDialog(
+          title: const Text('Edit Transaction'),
+          content: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _amountController,
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter an amount';
+                    }
+                    return null;
+                  },
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a description';
+                    }
+                    return null;
+                  },
+                ),
+                Row(
+                  children: [
+                    Radio(
+                      value: 'income',
+                      groupValue: _type,
+                      onChanged: (value) {
+                        setState(() {
+                          _type = value as String;
+                        });
+                      },
+                    ),
+                    const Text('Income'),
+                    Radio(
+                      value: 'expense',
+                      groupValue: _type,
+                      onChanged: (value) {
+                        setState(() {
+                          _type = value as String;
+                        });
+                      },
+                    ),
+                    const Text('Expense'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () {
+                if (_formKey.currentState!.validate()) {
+                  final prefs = SharedPreferences.getInstance();
+                  prefs.then((prefs) {
+                    final transactionsJson = prefs.getString('transactions');
+                    if (transactionsJson != null) {
+                      final transactions = jsonDecode(transactionsJson);
+                      transactions[index] = {
+                        'amount': double.parse(_amountController.text),
+                        'description': _descriptionController.text,
+                        'type': _type,
+                      };
+                      prefs.setString('transactions', jsonEncode(transactions));
+                      _loadTransactions();
+                    }
+                  });
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showBudgetAdvisorDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final _formKey = GlobalKey<FormState>();
+        final _monthlySalaryController = TextEditingController();
+        return AlertDialog(
+          title: const Text('Budget Advisor'),
+          content: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _monthlySalaryController,
+                  decoration: const InputDecoration(labelText: 'Monthly Salary'),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a monthly salary';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Get Advice'),
+              onPressed: () {
+                if (_formKey.currentState!.validate()) {
+                  setState(() {
+                    _monthlySalary = double.parse(_monthlySalaryController.text);
+                  });
+                  Navigator.of(context).pop();
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: const Text('Budget Advice'),
+                        content: Text('Based on your monthly salary of \$${_monthlySalary.toStringAsFixed(2)}, you should consider allocating 50% towards necessary expenses, 30% towards discretionary spending, and 20% towards saving and debt repayment.'),
+                        actions: [
+                          TextButton(
+                            child: const Text('OK'),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
   void initState() {
     super.initState();
     _loadTransactions();
-    _fetchCryptos();
+    _fetchCryptoPrices();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Personal Finance & Crypto Tracker'),
+      ),
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          Dashboard(
-            totalNetWorth: _totalNetWorth,
-            monthlyIncome: _monthlyIncome,
-            monthlyExpenses: _monthlyExpenses,
+          // Dashboard
+          Column(
+            children: [
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      const Text('Total Net Worth'),
+                      Text('\$${_netWorth.toStringAsFixed(2)}'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      const Text('Monthly Income'),
+                      Text('\$${_monthlyIncome.toStringAsFixed(2)}'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      const Text('Monthly Expenses'),
+                      Text('\$${_monthlyExpenses.toStringAsFixed(2)}'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _showBudgetAdvisorDialog,
+                child: const Text('Get Budget Advice'),
+              ),
+            ],
           ),
-          Transactions(
-            transactions: _transactions,
-            saveTransactions: _saveTransactions,
-            calculateNetWorth: _calculateNetWorth,
+          // Transactions
+          Column(
+            children: [
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _showAddTransactionDialog,
+                child: const Text('Add Transaction'),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _transactions.length,
+                  itemBuilder: (context, index) {
+                    return ListTile(
+                      title: Text(_transactions[index]['description']),
+                      subtitle: Text('\$${_transactions[index]['amount'].toStringAsFixed(2)} (${_transactions[index]['type']})'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () {
+                              _showEditTransactionDialog(index);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete),
+                            onPressed: () {
+                              _deleteTransaction(index);
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          Cryptos(
-            cryptos: _cryptos,
+          // Crypto Prices
+          Column(
+            children: [
+              const SizedBox(height: 20),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _cryptoPrices.length,
+                  itemBuilder: (context, index) {
+                    return ListTile(
+                      title: Text(_cryptoPrices[index]['name']),
+                      subtitle: Text('Price: \$${_cryptoPrices[index]['current_price'].toStringAsFixed(2)}'),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          BudgetAdvisor(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -128,363 +474,9 @@ class _MyHomePageState extends State<MyHomePage> {
           });
         },
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.attach_money),
-            label: 'Transactions',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.currency_bitcoin),
-            label: 'Cryptos',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calculate),
-            label: 'Budget Advisor',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class Dashboard extends StatelessWidget {
-  final double totalNetWorth;
-  final double monthlyIncome;
-  final double monthlyExpenses;
-
-  const Dashboard({
-    Key? key,
-    required this.totalNetWorth,
-    required this.monthlyIncome,
-    required this.monthlyExpenses,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(height: 20),
-        CustomCard(
-          title: 'Total Net Worth',
-          value: totalNetWorth,
-        ),
-        CustomCard(
-          title: 'Monthly Income',
-          value: monthlyIncome,
-        ),
-        CustomCard(
-          title: 'Monthly Expenses',
-          value: monthlyExpenses,
-        ),
-      ],
-    );
-  }
-}
-
-class CustomCard extends StatelessWidget {
-  final String title;
-  final double value;
-
-  const CustomCard({
-    Key? key,
-    required this.title,
-    required this.value,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Row(
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 18),
-            ),
-            const Spacer(),
-            Text(
-              '\$${value.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class Transactions extends StatefulWidget {
-  final List<Transaction> transactions;
-  final Function saveTransactions;
-  final Function calculateNetWorth;
-
-  const Transactions({
-    Key? key,
-    required this.transactions,
-    required this.saveTransactions,
-    required this.calculateNetWorth,
-  }) : super(key: key);
-
-  @override
-  State<Transactions> createState() => _TransactionsState();
-}
-
-class _TransactionsState extends State<Transactions> {
-  final _formKey = GlobalKey<FormState>();
-  String _type = 'income';
-  double _amount = 0;
-  String _description = '';
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(height: 20),
-        Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Amount',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter an amount';
-                  }
-                  return null;
-                },
-                onSaved: (value) {
-                  _amount = double.parse(value!);
-                },
-              ),
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a description';
-                  }
-                  return null;
-                },
-                onSaved: (value) {
-                  _description = value!;
-                },
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _type = 'income';
-                      },
-                      child: Text(
-                        _type == 'income' ? 'Income' : 'Select Income',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _type = 'expense';
-                      },
-                      child: Text(
-                        _type == 'expense' ? 'Expense' : 'Select Expense',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    _formKey.currentState!.save();
-                    widget.transactions.add(
-                      Transaction(
-                        type: _type,
-                        amount: _amount,
-                        description: _description,
-                      ),
-                    );
-                    widget.saveTransactions();
-                    widget.calculateNetWorth();
-                    _formKey.currentState!.reset();
-                  }
-                },
-                child: const Text('Add Transaction'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        Expanded(
-          child: ListView.builder(
-            itemCount: widget.transactions.length,
-            itemBuilder: (context, index) {
-              return ListTile(
-                title: Text(
-                  '${widget.transactions[index].type} - ${widget.transactions[index].description}',
-                ),
-                subtitle: Text(
-                  '\$${widget.transactions[index].amount.toStringAsFixed(2)}',
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: () {
-                    widget.transactions.removeAt(index);
-                    widget.saveTransactions();
-                    widget.calculateNetWorth();
-                  },
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class Transaction {
-  final String type;
-  final double amount;
-  final String description;
-
-  Transaction({
-    required this.type,
-    required this.amount,
-    required this.description,
-  });
-
-  factory Transaction.fromJson(Map<String, dynamic> json) {
-    return Transaction(
-      type: json['type'],
-      amount: json['amount'],
-      description: json['description'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type,
-      'amount': amount,
-      'description': description,
-    };
-  }
-}
-
-class Cryptos extends StatelessWidget {
-  final List<Crypto> cryptos;
-
-  const Cryptos({
-    Key? key,
-    required this.cryptos,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: cryptos.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          title: Text(
-            cryptos[index].name,
-          ),
-          subtitle: Text(
-            '\$${cryptos[index].price.toStringAsFixed(2)}',
-          ),
-        );
-      },
-    );
-  }
-}
-
-class Crypto {
-  final String name;
-  final double price;
-
-  Crypto({
-    required this.name,
-    required this.price,
-  });
-
-  factory Crypto.fromJson(Map<String, dynamic> json) {
-    return Crypto(
-      name: json['name'],
-      price: json['current_price'],
-    );
-  }
-}
-
-class BudgetAdvisor extends StatefulWidget {
-  @override
-  State<BudgetAdvisor> createState() => _BudgetAdvisorState();
-}
-
-class _BudgetAdvisorState extends State<BudgetAdvisor> {
-  final _formKey = GlobalKey<FormState>();
-  double _monthlySalary = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-          TextFormField(
-            decoration: const InputDecoration(
-              labelText: 'Monthly Salary',
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter a monthly salary';
-              }
-              return null;
-            },
-            onSaved: (value) {
-              _monthlySalary = double.parse(value!);
-            },
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (_formKey.currentState!.validate()) {
-                _formKey.currentState!.save();
-                double savings = _monthlySalary * 0.2;
-                double expenses = _monthlySalary * 0.5;
-                double investments = _monthlySalary * 0.3;
-                showDialog(
-                  context: context,
-                  builder: (context) {
-                    return AlertDialog(
-                      title: const Text('Budget Advice'),
-                      content: Text(
-                        'Based on your monthly salary of \$$monthlySalary, we recommend:\n'
-                        'Savings: \$$savings\n'
-                        'Expenses: \$$expenses\n'
-                        'Investments: \$$investments',
-                      ),
-                      actions: [
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                          },
-                          child: const Text('OK'),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              }
-            },
-            child: const Text('Get Budget Advice'),
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Transactions'),
+          BottomNavigationBarItem(icon: Icon(Icons.currency_exchange), label: 'Crypto Prices'),
         ],
       ),
     );
