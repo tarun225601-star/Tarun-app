@@ -52,7 +52,6 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
   double _overallProgress = 0.0;
   String? _outputVideoPath;
 
-  // The 10 Real Autonomous Agent Squad for Media Production
   final List<AgentTask> _agents = [
     AgentTask(name: 'Aura-01', role: 'Ingest & Codec Validator'),
     AgentTask(name: 'Nexus-02', role: 'Prompt Semantic Interpreter'),
@@ -66,7 +65,6 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
     AgentTask(name: 'Export-10', role: 'Local Storage & Package Finisher'),
   ];
 
-  // API Key Configuration Dialog
   void _openSettings() {
     _apiKeyController.text = _replicateApiKey;
     showDialog(
@@ -113,7 +111,6 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
     );
   }
 
-  // Real Video Picker from Device Gallery
   Future<void> _pickRealVideo() async {
     final ImagePicker picker = ImagePicker();
     final XFile? pickedFile = await picker.pickVideo(source: ImageSource.gallery);
@@ -133,7 +130,6 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
     }
   }
 
-  // Real Execution Pipeline with 10 Agents
   void _executeProductionPipeline() async {
     if (_replicateApiKey.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -167,7 +163,6 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
     });
 
     try {
-      // Step-by-step real agent orchestration
       for (int i = 0; i < _agents.length; i++) {
         setState(() {
           _agents[i].status = 'Active & Processing';
@@ -175,7 +170,6 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
           _overallProgress = (i + 1) / _agents.length;
         });
 
-        // Real API check during Cortex payload optimization step
         if (i == 6) {
           await _pingReplicateValidation();
         } else {
@@ -218,9 +212,7 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
       if (response.statusCode != 200 && response.statusCode != 401) {
         throw Exception('API connection issue code: ${response.statusCode}');
       }
-    } catch (_) {
-      // Graceful fallback for network timeout during simulation testing
-    }
+    } catch (_) {}
   }
 
   @override
