@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -11,9 +11,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       title: 'Vizia Global Studio',
-      home: MyHomePage(),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: const MyHomePage(),
     );
   }
 }
@@ -28,16 +31,17 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final _groqApiKeyController = TextEditingController();
   final _aiVideoUpscaleApiKeyController = TextEditingController();
-  final _aiEnhancementApiKeyController = TextEditingController();
-  String _selectedFilePath = '';
-  double _progress = 0.0;
-  String _activeAgentStatus = '';
-  List<String> _logs = [];
+  final _aiEnhancementDenoisingApiKeyController = TextEditingController();
+  final _videoUrlController = TextEditingController();
+  String _activeAgent = '';
+  String _log = '';
+  double _progress = 0;
+  bool _isRunning = false;
 
   Future<void> _showSettingsDialog() async {
     await showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Settings'),
           content: Column(
@@ -50,7 +54,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               TextField(
                 controller: _aiVideoUpscaleApiKeyController,
                 decoration: const InputDecoration(
@@ -58,9 +62,9 @@ class _MyHomePageState extends State<MyHomePage> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               TextField(
-                controller: _aiEnhancementApiKeyController,
+                controller: _aiEnhancementDenoisingApiKeyController,
                 decoration: const InputDecoration(
                   labelText: 'AI Enhancement & Denoising API Key',
                   border: OutlineInputBorder(),
@@ -70,18 +74,12 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
           actions: [
             TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
               child: const Text('Save'),
               onPressed: () async {
                 final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('groqApiKey', _groqApiKeyController.text);
-                await prefs.setString('aiVideoUpscaleApiKey', _aiVideoUpscaleApiKeyController.text);
-                await prefs.setString('aiEnhancementApiKey', _aiEnhancementApiKeyController.text);
+                prefs.setString('groqApiKey', _groqApiKeyController.text);
+                prefs.setString('aiVideoUpscaleApiKey', _aiVideoUpscaleApiKeyController.text);
+                prefs.setString('aiEnhancementDenoisingApiKey', _aiEnhancementDenoisingApiKeyController.text);
                 Navigator.of(context).pop();
               },
             ),
@@ -91,48 +89,50 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Future<void> _selectVideoFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp4', 'mkv', 'mov', 'avi'],
-    );
-    if (result != null) {
-      setState(() {
-        _selectedFilePath = result.files.first.path!;
-      });
-    }
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _groqApiKeyController.text = prefs.getString('groqApiKey') ?? '';
+    _aiVideoUpscaleApiKeyController.text = prefs.getString('aiVideoUpscaleApiKey') ?? '';
+    _aiEnhancementDenoisingApiKeyController.text = prefs.getString('aiEnhancementDenoisingApiKey') ?? '';
   }
 
-  Future<void> _startUpscalingProcess() async {
-    final prefs = await SharedPreferences.getInstance();
-    final groqApiKey = prefs.getString('groqApiKey');
-    final aiVideoUpscaleApiKey = prefs.getString('aiVideoUpscaleApiKey');
-    final aiEnhancementApiKey = prefs.getString('aiEnhancementApiKey');
-
-    if (groqApiKey == null || aiVideoUpscaleApiKey == null || aiEnhancementApiKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please configure API keys in settings')),
-      );
+  Future<void> _runUpscaling() async {
+    if (_groqApiKeyController.text.isEmpty ||
+        _aiVideoUpscaleApiKeyController.text.isEmpty ||
+        _aiEnhancementDenoisingApiKeyController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill in all API keys')));
       return;
     }
-
+    if (_videoUrlController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a video URL')));
+      return;
+    }
     setState(() {
-      _progress = 0.0;
-      _activeAgentStatus = '';
-      _logs = [];
+      _isRunning = true;
+      _progress = 0;
+      _log = '';
     });
-
-    for (int i = 1; i <= 10; i++) {
+    for (int i = 0; i < 10; i++) {
       setState(() {
-        _activeAgentStatus = 'Agent $i is working on the video';
-        _logs.add('Agent $i started working on the video');
+        _activeAgent = 'Agent $i';
+        _log += 'Starting agent $i\n';
       });
       await Future.delayed(const Duration(milliseconds: 500));
       setState(() {
+        _log += 'Agent $i finished\n';
         _progress += 10;
-        _logs.add('Agent $i finished working on the video');
       });
     }
+    setState(() {
+      _isRunning = false;
+      _activeAgent = '';
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
   }
 
   @override
@@ -148,33 +148,31 @@ class _MyHomePageState extends State<MyHomePage> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            ElevatedButton(
-              onPressed: _selectVideoFile,
-              child: const Text('Select Video from Device'),
+            TextField(
+              controller: _videoUrlController,
+              decoration: const InputDecoration(
+                labelText: 'Enter Video Cloud URL / S3 Link',
+                border: OutlineInputBorder(),
+              ),
             ),
-            const SizedBox(height: 16),
-            Text(_selectedFilePath),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _startUpscalingProcess,
-              child: const Text('Start Upscaling Process'),
+              onPressed: _runUpscaling,
+              child: const Text('Run Upscaling'),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             LinearProgressIndicator(
               value: _progress / 100,
             ),
-            const SizedBox(height: 16),
-            Text(_activeAgentStatus),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+            Text('Active Agent: $_activeAgent'),
+            const SizedBox(height: 20),
             Expanded(
-              child: ListView.builder(
-                itemCount: _logs.length,
-                itemBuilder: (context, index) {
-                  return Text(_logs[index]);
-                },
+              child: SingleChildScrollView(
+                child: Text(_log),
               ),
             ),
           ],
