@@ -5,63 +5,47 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Workflow Status Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(),
+    return const MaterialApp(
+      title: 'Flutter Demo',
+      home: MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+  const MyHomePage({Key? key}) : super(key: key);
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String workflowStatus = 'init';
+  String workflowStatus = ''; // Removed final keyword
 
-  void _updateStatus() {
-    workflowStatus = 'in_progress';
-    setState(() {});
-  }
-
-  void _completeWorkflow() {
-    workflowStatus = 'completed';
-    setState(() {});
+  void updateWorkflowStatus() {
+    for (var i = 0; i < 10; i++) {
+      workflowStatus = 'Status $i'; // Now this line won't cause a compilation error
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Workflow Status Demo'),
+        title: const Text('Flutter Demo'),
       ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              workflowStatus,
-              style: const TextStyle(fontSize: 24),
-            ),
-            const SizedBox(height: 20),
+          children: [
+            Text(workflowStatus),
             ElevatedButton(
-              onPressed: _updateStatus,
-              child: const Text('Start Workflow'),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: _completeWorkflow,
-              child: const Text('Complete Workflow'),
+              onPressed: updateWorkflowStatus,
+              child: const Text('Update Workflow Status'),
             ),
           ],
         ),
