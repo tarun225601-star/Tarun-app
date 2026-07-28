@@ -7,478 +7,378 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Personal Finance & Crypto Tracker',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        primarySwatch: Colors.blue,
-      ),
-      home: const BudgetAdvisor(),
-    );
-  }
+  State<MyApp> createState() => _MyAppState();
 }
 
-class BudgetAdvisor extends StatefulWidget {
-  const BudgetAdvisor({Key? key}) : super(key: key);
+class _MyAppState extends State<MyApp> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _promptController = TextEditingController();
+  final _priceController = TextEditingController();
+  final _ghTokenController = TextEditingController();
+  final _ghOwnerController = TextEditingController();
+  final _repoNameController = TextEditingController();
+  final _groqKeyController = TextEditingController();
+  String _workflowStatus = '';
+  String _apkUrl = '';
+  List<App> _publishedApps = [];
 
-  @override
-  State<BudgetAdvisor> createState() => _BudgetAdvisorState();
-}
-
-class _BudgetAdvisorState extends State<BudgetAdvisor> {
-  int _currentIndex = 0;
-  double _monthlySalary = 0;
-  double _monthlyIncome = 0;
-  double _monthlyExpenses = 0;
-  double _netWorth = 0;
-  List<Map<String, dynamic>> _transactions = [];
-  List<Map<String, dynamic>> _cryptoPrices = [];
-
-  Future<void> _fetchCryptoPrices() async {
-    final response = await http.get(Uri.parse('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false'));
-    if (response.statusCode == 200) {
-      setState(() {
-        _cryptoPrices = jsonDecode(response.body);
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to fetch crypto prices')));
-    }
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setString('standalone_gh_token', _ghTokenController.text);
+    prefs.setString('standalone_gh_owner', _ghOwnerController.text);
+    prefs.setString('standalone_repo_name', _repoNameController.text);
+    prefs.setString('standalone_groq_key', _groqKeyController.text);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
   }
 
-  Future<void> _saveTransaction(Map<String, dynamic> transaction) async {
-    final prefs = await SharedPreferences.getInstance();
-    final transactionsJson = prefs.getString('transactions');
-    if (transactionsJson != null) {
-      final transactions = jsonDecode(transactionsJson);
-      transactions.add(transaction);
-      await prefs.setString('transactions', jsonEncode(transactions));
-    } else {
-      await prefs.setString('transactions', jsonEncode([transaction]));
-    }
-    _loadTransactions();
-  }
-
-  Future<void> _loadTransactions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final transactionsJson = prefs.getString('transactions');
-    if (transactionsJson != null) {
-      setState(() {
-        _transactions = jsonDecode(transactionsJson);
-        _monthlyIncome = 0;
-        _monthlyExpenses = 0;
-        for (final transaction in _transactions) {
-          if (transaction['type'] == 'income') {
-            _monthlyIncome += transaction['amount'];
-          } else {
-            _monthlyExpenses += transaction['amount'];
+  Future<void> _buildApp() async {
+    if (_formKey.currentState!.validate()) {
+      final response = await http.post(
+        Uri.parse('https://api.groq.com/v1/generate'),
+        headers: {
+          'Authorization': 'Bearer ${_groqKeyController.text}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'model': 'llama-3.3-70b-versatile',
+          'prompt': _promptController.text,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final code = response.body;
+        final workflowResponse = await http.post(
+          Uri.parse('https://api.github.com/repos/${_ghOwnerController.text}/${_repoNameController.text}/actions/workflows'),
+          headers: {
+            'Authorization': 'Bearer ${_ghTokenController.text}',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'name': 'build.yml',
+            'path': '.github/workflows/build.yml',
+            'contents': 'name: Build\non: push\njobs: build:\n  runs-on: ubuntu-latest\n  steps:\n  - name: Checkout code\n    uses: actions/checkout@v2\n  - name: Build and deploy\n    run: | \n      flutter pub get\n      flutter build apk',
+          }),
+        );
+        if (workflowResponse.statusCode == 201) {
+          final workflowId = jsonDecode(workflowResponse.body)['id'];
+          final workflowStatusResponse = await http.get(
+            Uri.parse('https://api.github.com/repos/${_ghOwnerController.text}/${_repoNameController.text}/actions/workflows/$workflowId'),
+            headers: {
+              'Authorization': 'Bearer ${_ghTokenController.text}',
+              'Content-Type': 'application/json',
+            },
+          );
+          if (workflowStatusResponse.statusCode == 200) {
+            final workflowStatus = jsonDecode(workflowStatusResponse.body)['status'];
+            while (workflowStatus != 'success') {
+              await Future.delayed(const Duration(seconds: 10));
+              final workflowStatusResponse = await http.get(
+                Uri.parse('https://api.github.com/repos/${_ghOwnerController.text}/${_repoNameController.text}/actions/workflows/$workflowId'),
+                headers: {
+                  'Authorization': 'Bearer ${_ghTokenController.text}',
+                  'Content-Type': 'application/json',
+                },
+              );
+              workflowStatus = jsonDecode(workflowStatusResponse.body)['status'];
+            }
+            final apkResponse = await http.get(
+              Uri.parse('https://api.github.com/repos/${_ghOwnerController.text}/${_repoNameController.text}/actions/artifacts'),
+              headers: {
+                'Authorization': 'Bearer ${_ghTokenController.text}',
+                'Content-Type': 'application/json',
+              },
+            );
+            if (apkResponse.statusCode == 200) {
+              final apkUrl = jsonDecode(apkResponse.body)[0]['archive_download_url'];
+              setState(() {
+                _apkUrl = apkUrl;
+              });
+              _publishedApps.add(App(
+                title: _titleController.text,
+                description: _promptController.text,
+                price: _priceController.text,
+                apkUrl: apkUrl,
+              ));
+            }
           }
         }
-        _netWorth = _monthlyIncome - _monthlyExpenses;
-      });
+      }
     }
   }
 
-  Future<void> _deleteTransaction(int index) async {
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final transactionsJson = prefs.getString('transactions');
-    if (transactionsJson != null) {
-      final transactions = jsonDecode(transactionsJson);
-      transactions.removeAt(index);
-      await prefs.setString('transactions', jsonEncode(transactions));
-      _loadTransactions();
-    }
-  }
-
-  void _showAddTransactionDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final _formKey = GlobalKey<FormState>();
-        final _amountController = TextEditingController();
-        final _descriptionController = TextEditingController();
-        String _type = 'income';
-        return AlertDialog(
-          title: const Text('Add Transaction'),
-          content: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _amountController,
-                  decoration: const InputDecoration(labelText: 'Amount'),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter an amount';
-                    }
-                    return null;
-                  },
-                ),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a description';
-                    }
-                    return null;
-                  },
-                ),
-                Row(
-                  children: [
-                    Radio(
-                      value: 'income',
-                      groupValue: _type,
-                      onChanged: (value) {
-                        setState(() {
-                          _type = value as String;
-                        });
-                      },
-                    ),
-                    const Text('Income'),
-                    Radio(
-                      value: 'expense',
-                      groupValue: _type,
-                      onChanged: (value) {
-                        setState(() {
-                          _type = value as String;
-                        });
-                      },
-                    ),
-                    const Text('Expense'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Add'),
-              onPressed: () {
-                if (_formKey.currentState!.validate()) {
-                  _saveTransaction({
-                    'amount': double.parse(_amountController.text),
-                    'description': _descriptionController.text,
-                    'type': _type,
-                  });
-                  Navigator.of(context).pop();
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showEditTransactionDialog(int index) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final _formKey = GlobalKey<FormState>();
-        final _amountController = TextEditingController(text: _transactions[index]['amount'].toString());
-        final _descriptionController = TextEditingController(text: _transactions[index]['description']);
-        String _type = _transactions[index]['type'];
-        return AlertDialog(
-          title: const Text('Edit Transaction'),
-          content: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _amountController,
-                  decoration: const InputDecoration(labelText: 'Amount'),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter an amount';
-                    }
-                    return null;
-                  },
-                ),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a description';
-                    }
-                    return null;
-                  },
-                ),
-                Row(
-                  children: [
-                    Radio(
-                      value: 'income',
-                      groupValue: _type,
-                      onChanged: (value) {
-                        setState(() {
-                          _type = value as String;
-                        });
-                      },
-                    ),
-                    const Text('Income'),
-                    Radio(
-                      value: 'expense',
-                      groupValue: _type,
-                      onChanged: (value) {
-                        setState(() {
-                          _type = value as String;
-                        });
-                      },
-                    ),
-                    const Text('Expense'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Save'),
-              onPressed: () {
-                if (_formKey.currentState!.validate()) {
-                  final prefs = SharedPreferences.getInstance();
-                  prefs.then((prefs) {
-                    final transactionsJson = prefs.getString('transactions');
-                    if (transactionsJson != null) {
-                      final transactions = jsonDecode(transactionsJson);
-                      transactions[index] = {
-                        'amount': double.parse(_amountController.text),
-                        'description': _descriptionController.text,
-                        'type': _type,
-                      };
-                      prefs.setString('transactions', jsonEncode(transactions));
-                      _loadTransactions();
-                    }
-                  });
-                  Navigator.of(context).pop();
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showBudgetAdvisorDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final _formKey = GlobalKey<FormState>();
-        final _monthlySalaryController = TextEditingController();
-        return AlertDialog(
-          title: const Text('Budget Advisor'),
-          content: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _monthlySalaryController,
-                  decoration: const InputDecoration(labelText: 'Monthly Salary'),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a monthly salary';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Get Advice'),
-              onPressed: () {
-                if (_formKey.currentState!.validate()) {
-                  setState(() {
-                    _monthlySalary = double.parse(_monthlySalaryController.text);
-                  });
-                  Navigator.of(context).pop();
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        title: const Text('Budget Advice'),
-                        content: Text('Based on your monthly salary of \$${_monthlySalary.toStringAsFixed(2)}, you should consider allocating 50% towards necessary expenses, 30% towards discretionary spending, and 20% towards saving and debt repayment.'),
-                        actions: [
-                          TextButton(
-                            child: const Text('OK'),
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
+    _ghTokenController.text = prefs.getString('standalone_gh_token') ?? '';
+    _ghOwnerController.text = prefs.getString('standalone_gh_owner') ?? '';
+    _repoNameController.text = prefs.getString('standalone_repo_name') ?? '';
+    _groqKeyController.text = prefs.getString('standalone_groq_key') ?? '';
   }
 
   @override
   void initState() {
     super.initState();
-    _loadTransactions();
-    _fetchCryptoPrices();
+    _loadSettings();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Personal Finance & Crypto Tracker'),
+    return MaterialApp(
+      title: 'Tarun Independent App Store & Studio',
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+        scaffoldBackgroundColor: const Color(0xFF2F4F7F),
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          // Dashboard
-          Column(
+      home: DefaultTabController(
+        length: 3,
+        child: Scaffold(
+          body: TabBarView(
             children: [
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const Text('Total Net Worth'),
-                      Text('\$${_netWorth.toStringAsFixed(2)}'),
-                    ],
-                  ),
-                ),
+              SettingsScreen(
+                ghTokenController: _ghTokenController,
+                ghOwnerController: _ghOwnerController,
+                repoNameController: _repoNameController,
+                groqKeyController: _groqKeyController,
+                saveSettings: _saveSettings,
               ),
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const Text('Monthly Income'),
-                      Text('\$${_monthlyIncome.toStringAsFixed(2)}'),
-                    ],
-                  ),
-                ),
+              AppStudioScreen(
+                titleController: _titleController,
+                promptController: _promptController,
+                priceController: _priceController,
+                ghTokenController: _ghTokenController,
+                ghOwnerController: _ghOwnerController,
+                repoNameController: _repoNameController,
+                groqKeyController: _groqKeyController,
+                buildApp: _buildApp,
               ),
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const Text('Monthly Expenses'),
-                      Text('\$${_monthlyExpenses.toStringAsFixed(2)}'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _showBudgetAdvisorDialog,
-                child: const Text('Get Budget Advice'),
+              AppMarketplaceScreen(
+                publishedApps: _publishedApps,
               ),
             ],
           ),
-          // Transactions
-          Column(
-            children: [
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _showAddTransactionDialog,
-                child: const Text('Add Transaction'),
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _transactions.length,
-                  itemBuilder: (context, index) {
-                    return ListTile(
-                      title: Text(_transactions[index]['description']),
-                      subtitle: Text('\$${_transactions[index]['amount'].toStringAsFixed(2)} (${_transactions[index]['type']})'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () {
-                              _showEditTransactionDialog(index);
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete),
-                            onPressed: () {
-                              _deleteTransaction(index);
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
+          bottomNavigationBar: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.settings), text: 'Settings'),
+              Tab(icon: Icon(Icons.build), text: 'App Studio'),
+              Tab(icon: Icon(Icons.shopping_basket), text: 'App Marketplace'),
             ],
           ),
-          // Crypto Prices
-          Column(
-            children: [
-              const SizedBox(height: 20),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _cryptoPrices.length,
-                  itemBuilder: (context, index) {
-                    return ListTile(
-                      title: Text(_cryptoPrices[index]['name']),
-                      subtitle: Text('Price: \$${_cryptoPrices[index]['current_price'].toStringAsFixed(2)}'),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.list), label: 'Transactions'),
-          BottomNavigationBarItem(icon: Icon(Icons.currency_exchange), label: 'Crypto Prices'),
-        ],
+        ),
       ),
     );
   }
+}
+
+class SettingsScreen extends StatefulWidget {
+  final TextEditingController ghTokenController;
+  final TextEditingController ghOwnerController;
+  final TextEditingController repoNameController;
+  final TextEditingController groqKeyController;
+  final Function saveSettings;
+
+  const SettingsScreen({
+    Key? key,
+    required this.ghTokenController,
+    required this.ghOwnerController,
+    required this.repoNameController,
+    required this.groqKeyController,
+    required this.saveSettings,
+  }) : super(key: key);
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Form(
+        child: Column(
+          children: [
+            TextFormField(
+              controller: widget.ghTokenController,
+              decoration: const InputDecoration(
+                labelText: 'GitHub Personal Access Token',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: widget.ghOwnerController,
+              decoration: const InputDecoration(
+                labelText: 'GitHub Owner Username',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: widget.repoNameController,
+              decoration: const InputDecoration(
+                labelText: 'Repository Name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: widget.groqKeyController,
+              decoration: const InputDecoration(
+                labelText: 'Groq Cloud API Key',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                widget.saveSettings();
+              },
+              child: const Text('Save Settings'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AppStudioScreen extends StatefulWidget {
+  final TextEditingController titleController;
+  final TextEditingController promptController;
+  final TextEditingController priceController;
+  final TextEditingController ghTokenController;
+  final TextEditingController ghOwnerController;
+  final TextEditingController repoNameController;
+  final TextEditingController groqKeyController;
+  final Function buildApp;
+
+  const AppStudioScreen({
+    Key? key,
+    required this.titleController,
+    required this.promptController,
+    required this.priceController,
+    required this.ghTokenController,
+    required this.ghOwnerController,
+    required this.repoNameController,
+    required this.groqKeyController,
+    required this.buildApp,
+  }) : super(key: key);
+
+  @override
+  State<AppStudioScreen> createState() => _AppStudioScreenState();
+}
+
+class _AppStudioScreenState extends State<AppStudioScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Form(
+        child: Column(
+          children: [
+            TextFormField(
+              controller: widget.titleController,
+              decoration: const InputDecoration(
+                labelText: 'App Title',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: widget.promptController,
+              decoration: const InputDecoration(
+                labelText: 'App Prompt',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: widget.priceController,
+              decoration: const InputDecoration(
+                labelText: 'App Price (INR)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                widget.buildApp();
+              },
+              child: const Text('Build App'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AppMarketplaceScreen extends StatefulWidget {
+  final List<App> publishedApps;
+
+  const AppMarketplaceScreen({
+    Key? key,
+    required this.publishedApps,
+  }) : super(key: key);
+
+  @override
+  State<AppMarketplaceScreen> createState() => _AppMarketplaceScreenState();
+}
+
+class _AppMarketplaceScreenState extends State<AppMarketplaceScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: widget.publishedApps.length,
+      itemBuilder: (context, index) {
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                Text(
+                  widget.publishedApps[index].title,
+                  style: const TextStyle(fontSize: 20),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  widget.publishedApps[index].description,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Price: ${widget.publishedApps[index].price}',
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: () {
+                    // Launch external URL to download or purchase the app
+                  },
+                  child: const Text('Download'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class App {
+  final String title;
+  final String description;
+  final String price;
+  final String apkUrl;
+
+  App({
+    required this.title,
+    required this.description,
+    required this.price,
+    required this.apkUrl,
+  });
 }
