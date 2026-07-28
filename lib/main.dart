@@ -1,128 +1,19 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:video_editor_sdk/video_editor_sdk.dart';
 
-// Configuration class for managing API keys and environment variables
-class Config {
-  static const String openAIApiKey = 'YOUR_OPENAI_API_KEY';
-  static const String replicateApiKey = 'YOUR_REPLICATE_API_KEY';
-  static const String ffmpegPath = 'YOUR_FFMPEG_PATH';
+void main() {
+  runApp(MyApp());
 }
 
-// Agent class for the 10-agent pipeline
-abstract class Agent {
-  void execute(String prompt, String videoPath);
-}
-
-// Agent 1: Prompt Parser Agent
-class PromptParserAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Use an LLM to decode the user's natural language prompt and extract specific instructions
-    print('Prompt Parser Agent: $prompt');
-  }
-}
-
-// Agent 2: Scene Detection & Trimmer Agent
-class SceneDetectionTrimmerAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Automatically detect and remove dead, silent, or unwanted parts from the input video using FFmpeg
-    final ffmpegCommand = '$Config.ffmpegPath -i $videoPath -vf trim=0:10 output.mp4';
-    print('Scene Detection & Trimmer Agent: $ffmpegCommand');
-  }
-}
-
-// Agent 3: Transcription & Subtitle Agent
-class TranscriptionSubtitleAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Generate fast-paced dynamic text captions synced with audio
-    print('Transcription & Subtitle Agent: $prompt');
-  }
-}
-
-// Agent 4: B-Roll & Visual Agent
-class BRollVisualAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Integrate stock footage or visual elements if requested
-    print('B-Roll & Visual Agent: $prompt');
-  }
-}
-
-// Agent 5: Gunshot & Muzzle Flash Agent
-class GunshotMuzzleFlashAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Detect action prompts and add realistic gunshot visuals and muzzle flashes
-    print('Gunshot & Muzzle Flash Agent: $prompt');
-  }
-}
-
-// Agent 6: Explosions & Fire Agent
-class ExplosionsFireAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Render fire and explosion VFX if triggered by the prompt
-    print('Explosions & Fire Agent: $prompt');
-  }
-}
-
-// Agent 7: Cinematic Color & Contrast Agent
-class CinematicColorContrastAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Boost contrast and apply a gritty war-grade or cinematic color grading
-    print('Cinematic Color & Contrast Agent: $prompt');
-  }
-}
-
-// Agent 8: Speed Ramping / Slow-Motion Agent
-class SpeedRampingSlowMotionAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Automatically apply dynamic slow-motion on peak action frames
-    print('Speed Ramping / Slow-Motion Agent: $prompt');
-  }
-}
-
-// Agent 9: Audio & SFX Sync Agent
-class AudioSFXSyncAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Align sound effects with visual events
-    print('Audio & SFX Sync Agent: $prompt');
-  }
-}
-
-// Agent 10: Final Rendering & Assembly Agent
-class FinalRenderingAssemblyAgent extends Agent {
-  @override
-  void execute(String prompt, String videoPath) {
-    // Compile all layers, sync audio/video, and output a single high-definition final `.mp4` file
-    print('Final Rendering & Assembly Agent: $prompt');
-  }
-}
-
-// List of agents in the pipeline
-final List<Agent> agents = [
-  PromptParserAgent(),
-  SceneDetectionTrimmerAgent(),
-  TranscriptionSubtitleAgent(),
-  BRollVisualAgent(),
-  GunshotMuzzleFlashAgent(),
-  ExplosionsFireAgent(),
-  CinematicColorContrastAgent(),
-  SpeedRampingSlowMotionAgent(),
-  AudioSFXSyncAgent(),
-  FinalRenderingAssemblyAgent(),
-];
-
-// Main application
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Prompt-Based AI Video Editor',
+      title: 'AI Video Editor',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -131,21 +22,113 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Home page with prompt input and execute button
 class MyHomePage extends StatefulWidget {
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  String _selectedVideo = '';
+  String _prompt = '';
+  int _progress = 0;
+  String _status = '';
+  String _openAiApiKey = '';
+  String _replicateApiKey = '';
+  String _ffmpegPath = '';
+
   final _promptController = TextEditingController();
 
-  void _executePipeline() {
-    final prompt = _promptController.text;
-    final videoPath = 'path_to_video.mp4'; // Replace with actual video path
+  Future<void> _selectVideo() async {
+    final FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.video,
+    );
+    if (result != null) {
+      setState(() {
+        _selectedVideo = result.files.first.name;
+      });
+    }
+  }
 
-    for (final agent in agents) {
-      agent.execute(prompt, videoPath);
+  Future<void> _runEditing() async {
+    if (_selectedVideo.isEmpty || _prompt.isEmpty) {
+      return;
+    }
+    setState(() {
+      _progress = 0;
+      _status = 'Agent 1: Parsing prompt...';
+    });
+    // Simulate Agent 1: Prompt Parser
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 10;
+      _status = 'Agent 2: Trimming...';
+    });
+    // Simulate Agent 2: Scene Detection & Trimmer
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 20;
+      _status = 'Agent 3: Transcribing...';
+    });
+    // Simulate Agent 3: Transcription & Subtitle
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 30;
+      _status = 'Agent 4: Integrating B-Roll...';
+    });
+    // Simulate Agent 4: B-Roll & Visual
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 40;
+      _status = 'Agent 5: Adding gunshots...';
+    });
+    // Simulate Agent 5: Gunshot & Muzzle Flash
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 50;
+      _status = 'Agent 6: Adding explosions...';
+    });
+    // Simulate Agent 6: Explosions & Fire
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 60;
+      _status = 'Agent 7: Adjusting contrast...';
+    });
+    // Simulate Agent 7: Cinematic Color & Contrast
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 70;
+      _status = 'Agent 8: Applying slow-motion...';
+    });
+    // Simulate Agent 8: Speed Ramping / Slow-Motion
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 80;
+      _status = 'Agent 9: Syncing audio...';
+    });
+    // Simulate Agent 9: Audio & SFX Sync
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 90;
+      _status = 'Agent 10: Finalizing...';
+    });
+    // Simulate Agent 10: Final Rendering & Assembly
+    await Future.delayed(Duration(milliseconds: 500));
+    setState(() {
+      _progress = 100;
+      _status = 'Editing complete!';
+    });
+  }
+
+  Future<void> _setupApiKeys() async {
+    final Directory directory = await getApplicationDocumentsDirectory();
+    final File file = File('${directory.path}/api_keys.txt');
+    if (await file.exists()) {
+      final String contents = await file.readAsString();
+      setState(() {
+        _openAiApiKey = contents.split('\n')[0];
+        _replicateApiKey = contents.split('\n')[1];
+        _ffmpegPath = contents.split('\n')[2];
+      });
     }
   }
 
@@ -153,33 +136,43 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Prompt-Based AI Video Editor'),
+        title: Text('AI Video Editor'),
       ),
-      body: Center(
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: TextField(
-                controller: _promptController,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Enter prompt',
-                ),
+            ElevatedButton(
+              onPressed: _selectVideo,
+              child: Text('Select Raw Video'),
+            ),
+            Text(_selectedVideo.isEmpty ? 'No video selected' : _selectedVideo),
+            SizedBox(height: 16),
+            TextField(
+              controller: _promptController,
+              decoration: InputDecoration(
+                labelText: 'Enter editing instructions',
+                border: OutlineInputBorder(),
               ),
             ),
+            SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _executePipeline,
-              child: Text('Execute Pipeline'),
+              onPressed: _runEditing,
+              child: Text('Start Editing'),
+            ),
+            SizedBox(height: 16),
+            LinearProgressIndicator(
+              value: _progress / 100,
+            ),
+            Text(_status),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _setupApiKeys,
+              child: Text('Setup API Keys'),
             ),
           ],
         ),
       ),
     );
   }
-}
-
-void main() {
-  runApp(MyApp());
 }
