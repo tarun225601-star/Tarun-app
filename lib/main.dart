@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -14,6 +14,7 @@ class MyApp extends StatelessWidget {
       title: 'Vizia Global Studio',
       theme: ThemeData(
         primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: const Color(0xFF2F343A),
       ),
       home: const MyHomePage(),
     );
@@ -28,255 +29,192 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _currentIndex = 0;
-  final List<Widget> _children = [
-    const HomeDashboard(),
-    const UploadAppScreen(),
-    const MyPurchases(),
-    const Profile(),
+  final _formKey = GlobalKey<FormState>();
+  final _apiKeyController = TextEditingController();
+  String _apiKey = '';
+  bool _isProcessing = false;
+  int _currentAgent = 0;
+  List<String> _agents = [
+    'Ingestion & Frame Splitter',
+    'Noise & Grain Remover',
+    'Super-Resolution Upscaler (8K synthesis)',
+    'Face Restoration & Details',
+    'Cinematic Color Grader',
+    'HDR & Lighting Enhancer',
+    'Frame Interpolation (Fluid 60fps)',
+    'Audio Sync & Noise Gate',
+    'AI Compression & Bitrate Optimizer',
+    'Final Rendering & Cloud Deliverer',
+  ];
+  List<String> _agentDescriptions = [
+    'Splitting video into frames for processing',
+    'Removing noise and grain from the video',
+    'Upscaling the video to 8K resolution',
+    'Restoring and enhancing face details',
+    'Applying cinematic color grading',
+    'Enhancing HDR and lighting',
+    'Interpolating frames for smooth 60fps',
+    'Synchronizing audio and removing noise',
+    'Optimizing compression and bitrate',
+    'Rendering the final video and delivering to cloud',
   ];
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: _children[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.upload), label: 'Upload'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Purchases'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
-      ),
-    );
+  Future<void> _saveApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setString('apiKey', _apiKeyController.text);
+    setState(() {
+      _apiKey = _apiKeyController.text;
+    });
   }
-}
 
-class HomeDashboard extends StatefulWidget {
-  const HomeDashboard({Key? key}) : super(key: key);
-
-  @override
-  State<HomeDashboard> createState() => _HomeDashboardState();
-}
-
-class _HomeDashboardState extends State<HomeDashboard> {
-  final List<App> _apps = [
-    App(
-      id: 1,
-      name: 'App 1',
-      description: 'Description 1',
-      price: 9.99,
-      category: 'Category 1',
-    ),
-    App(
-      id: 2,
-      name: 'App 2',
-      description: 'Description 2',
-      price: 19.99,
-      category: 'Category 2',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home Dashboard'),
-      ),
-      body: ListView.builder(
-        itemCount: _apps.length,
-        itemBuilder: (context, index) {
-          return Card(
-            child: ListTile(
-              title: Text(_apps[index].name),
-              subtitle: Text(_apps[index].description),
-              trailing: Text('\$${_apps[index].price}'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AppDetails(app: _apps[index]),
-                  ),
-                );
-              },
-            ),
-          );
-        },
-      ),
-    );
+  Future<void> _loadApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _apiKey = prefs.getString('apiKey') ?? '';
+    });
   }
-}
 
-class App {
-  final int id;
-  final String name;
-  final String description;
-  final double price;
-  final String category;
-
-  App({required this.id, required this.name, required this.description, required this.price, required this.category});
-}
-
-class AppDetails extends StatelessWidget {
-  final App app;
-
-  const AppDetails({Key? key, required this.app}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(app.name),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Text(app.description),
-            const SizedBox(height: 16),
-            Text('Price: \$${app.price}'),
-            const SizedBox(height: 16),
-            ElevatedButton(
+  Future<void> _processVideo() async {
+    if (_apiKey.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('API Key Missing'),
+          content: const Text('Please enter a valid API key'),
+          actions: [
+            TextButton(
               onPressed: () {
-                // Simulate purchase
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('App purchased successfully')));
+                Navigator.pop(context);
               },
-              child: const Text('Buy Now'),
+              child: const Text('OK'),
             ),
           ],
         ),
-      ),
-    );
+      );
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    for (int i = 0; i < _agents.length; i++) {
+      setState(() {
+        _currentAgent = i;
+      });
+      await Future.delayed(const Duration(seconds: 2));
+    }
+
+    setState(() {
+      _isProcessing = false;
+    });
   }
-}
-
-class UploadAppScreen extends StatefulWidget {
-  const UploadAppScreen({Key? key}) : super(key: key);
 
   @override
-  State<UploadAppScreen> createState() => _UploadAppScreenState();
-}
-
-class _UploadAppScreenState extends State<UploadAppScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _appNameController = TextEditingController();
-  final _appDescriptionController = TextEditingController();
-  final _appPriceController = TextEditingController();
-  final _appCategoryController = TextEditingController();
-
-  @override
-  void dispose() {
-    _appNameController.dispose();
-    _appDescriptionController.dispose();
-    _appPriceController.dispose();
-    _appCategoryController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadApiKey();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Upload App'),
+        title: const Text('Vizia Global Studio'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('API Key Settings'),
+                  content: Form(
+                    key: _formKey,
+                    child: TextFormField(
+                      controller: _apiKeyController,
+                      decoration: const InputDecoration(
+                        labelText: 'API Key',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a valid API key';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        if (_formKey.currentState!.validate()) {
+                          _saveApiKey();
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _appNameController,
-                decoration: const InputDecoration(labelText: 'App Name'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter app name';
-                  }
-                  return null;
-                },
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00FFFF),
               ),
-              TextFormField(
-                controller: _appDescriptionController,
-                decoration: const InputDecoration(labelText: 'App Description'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter app description';
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _appPriceController,
-                decoration: const InputDecoration(labelText: 'App Price'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter app price';
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _appCategoryController,
-                decoration: const InputDecoration(labelText: 'App Category'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter app category';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    // Upload app to server
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('App uploaded successfully')));
-                  }
-                },
-                child: const Text('Upload App'),
-              ),
-            ],
-          ),
+              onPressed: _isProcessing ? null : _processVideo,
+              child: const Text('Start AI Processing'),
+            ),
+            const SizedBox(height: 20),
+            _isProcessing
+                ? Column(
+                    children: [
+                      Text(
+                        _agents[_currentAgent],
+                        style: const TextStyle(
+                          fontSize: 18,
+                          color: Color(0xFF00FFFF),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _agentDescriptions[_currentAgent],
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      LinearProgressIndicator(
+                        value: _currentAgent / _agents.length,
+                        backgroundColor: const Color(0xFF2F343A),
+                        color: const Color(0xFF00FFFF),
+                      ),
+                    ],
+                  )
+                : const Text(
+                    'Upload your video and start the AI processing',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class MyPurchases extends StatelessWidget {
-  const MyPurchases({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Purchases'),
-      ),
-      body: const Center(
-        child: Text('No purchases yet'),
-      ),
-    );
-  }
-}
-
-class Profile extends StatelessWidget {
-  const Profile({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-      ),
-      body: const Center(
-        child: Text('Profile page'),
       ),
     );
   }
