@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 
 void main() {
   runApp(const MyApp());
@@ -12,13 +11,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       title: 'Vizia Global Studio',
-      theme: ThemeData(
-        primarySwatch: Colors.cyan,
-        scaffoldBackgroundColor: const Color(0xFF1A1D23),
-      ),
-      home: const MyHomePage(),
+      home: MyHomePage(),
     );
   }
 }
@@ -31,42 +26,25 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String _groqApiKey = '';
-  String _aiVideoUpscaleApiKey = '';
-  String _aiEnhancementDenoisingApiKey = '';
-  String _selectedVideoFilePath = '';
-  bool _isProcessing = false;
-  double _progress = 0;
-  int _currentAgent = 0;
-  final List<String> _agents = [
-    'Ingestion & Frame Splitter',
-    'Noise & Grain Remover',
-    'Super-Resolution Upscaler (8K synthesis)',
-    'Face Restoration & Details',
-    'Cinematic Color Grader',
-    'HDR & Lighting Enhancer',
-    'Frame Interpolation (Fluid 60fps)',
-    'Audio Sync & Noise Gate',
-    'AI Compression & Bitrate Optimizer',
-    'Final Rendering & Cloud Deliverer',
-  ];
+  final _groqApiKeyController = TextEditingController();
+  final _aiVideoUpscaleApiKeyController = TextEditingController();
+  final _aiEnhancementApiKeyController = TextEditingController();
+  String _selectedFilePath = '';
+  double _progress = 0.0;
+  String _activeAgentStatus = '';
+  List<String> _logs = [];
 
   Future<void> _showSettingsDialog() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final TextEditingController groqApiKeyController = TextEditingController(text: _groqApiKey);
-    final TextEditingController aiVideoUpscaleApiKeyController = TextEditingController(text: _aiVideoUpscaleApiKey);
-    final TextEditingController aiEnhancementDenoisingApiKeyController = TextEditingController(text: _aiEnhancementDenoisingApiKey);
-
     await showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
-          title: const Text('API Key Settings'),
+          title: const Text('Settings'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: groqApiKeyController,
+                controller: _groqApiKeyController,
                 decoration: const InputDecoration(
                   labelText: 'Groq API Key',
                   border: OutlineInputBorder(),
@@ -74,7 +52,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: aiVideoUpscaleApiKeyController,
+                controller: _aiVideoUpscaleApiKeyController,
                 decoration: const InputDecoration(
                   labelText: 'AI Video Upscale API Key',
                   border: OutlineInputBorder(),
@@ -82,7 +60,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: aiEnhancementDenoisingApiKeyController,
+                controller: _aiEnhancementApiKeyController,
                 decoration: const InputDecoration(
                   labelText: 'AI Enhancement & Denoising API Key',
                   border: OutlineInputBorder(),
@@ -100,12 +78,10 @@ class _MyHomePageState extends State<MyHomePage> {
             TextButton(
               child: const Text('Save'),
               onPressed: () async {
-                _groqApiKey = groqApiKeyController.text;
-                _aiVideoUpscaleApiKey = aiVideoUpscaleApiKeyController.text;
-                _aiEnhancementDenoisingApiKey = aiEnhancementDenoisingApiKeyController.text;
-                await prefs.setString('groqApiKey', _groqApiKey);
-                await prefs.setString('aiVideoUpscaleApiKey', _aiVideoUpscaleApiKey);
-                await prefs.setString('aiEnhancementDenoisingApiKey', _aiEnhancementDenoisingApiKey);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('groqApiKey', _groqApiKeyController.text);
+                await prefs.setString('aiVideoUpscaleApiKey', _aiVideoUpscaleApiKeyController.text);
+                await prefs.setString('aiEnhancementApiKey', _aiEnhancementApiKeyController.text);
                 Navigator.of(context).pop();
               },
             ),
@@ -116,47 +92,47 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _selectVideoFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp4', 'mkv', 'mov', 'avi'],
     );
-
-    if (result != null && result.files.single.path != null) {
+    if (result != null) {
       setState(() {
-        _selectedVideoFilePath = result.files.single.path!;
+        _selectedFilePath = result.files.first.path!;
       });
     }
   }
 
-  Future<void> _startProcessing() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    _groqApiKey = (await prefs.getString('groqApiKey')) ?? '';
-    _aiVideoUpscaleApiKey = (await prefs.getString('aiVideoUpscaleApiKey')) ?? '';
-    _aiEnhancementDenoisingApiKey = (await prefs.getString('aiEnhancementDenoisingApiKey')) ?? '';
+  Future<void> _startUpscalingProcess() async {
+    final prefs = await SharedPreferences.getInstance();
+    final groqApiKey = prefs.getString('groqApiKey');
+    final aiVideoUpscaleApiKey = prefs.getString('aiVideoUpscaleApiKey');
+    final aiEnhancementApiKey = prefs.getString('aiEnhancementApiKey');
 
-    if (_groqApiKey.isEmpty || _aiVideoUpscaleApiKey.isEmpty || _aiEnhancementDenoisingApiKey.isEmpty) {
+    if (groqApiKey == null || aiVideoUpscaleApiKey == null || aiEnhancementApiKey == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('API keys are missing. Please set them in the settings.')),
+        const SnackBar(content: Text('Please configure API keys in settings')),
       );
       return;
     }
 
     setState(() {
-      _isProcessing = true;
+      _progress = 0.0;
+      _activeAgentStatus = '';
+      _logs = [];
     });
 
-    for (int i = 0; i < _agents.length; i++) {
+    for (int i = 1; i <= 10; i++) {
       setState(() {
-        _currentAgent = i;
-        _progress = (i + 1) / _agents.length * 100;
+        _activeAgentStatus = 'Agent $i is working on the video';
+        _logs.add('Agent $i started working on the video');
       });
-
       await Future.delayed(const Duration(milliseconds: 500));
+      setState(() {
+        _progress += 10;
+        _logs.add('Agent $i finished working on the video');
+      });
     }
-
-    setState(() {
-      _isProcessing = false;
-    });
   }
 
   @override
@@ -180,20 +156,27 @@ class _MyHomePageState extends State<MyHomePage> {
               child: const Text('Select Video from Device'),
             ),
             const SizedBox(height: 16),
-            Text(_selectedVideoFilePath),
+            Text(_selectedFilePath),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _startProcessing,
-              child: const Text('Start Processing'),
+              onPressed: _startUpscalingProcess,
+              child: const Text('Start Upscaling Process'),
             ),
             const SizedBox(height: 16),
             LinearProgressIndicator(
               value: _progress / 100,
-              backgroundColor: Colors.cyan[100],
-              color: Colors.cyan,
             ),
             const SizedBox(height: 16),
-            Text(_isProcessing ? '${_agents[_currentAgent]} (${_progress}%)' : 'Not processing'),
+            Text(_activeAgentStatus),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _logs.length,
+                itemBuilder: (context, index) {
+                  return Text(_logs[index]);
+                },
+              ),
+            ),
           ],
         ),
       ),
