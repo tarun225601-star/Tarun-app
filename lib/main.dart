@@ -179,7 +179,7 @@ class _EditorHomePageState extends State<EditorHomePage> {
             Card(
               elevation: 2,
               child: Padding(
-                padding: const,
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
