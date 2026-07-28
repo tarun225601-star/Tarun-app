@@ -24,6 +24,20 @@ jobs:
         flutter-version: '3.19.0'
         channel: 'stable'
 
+    - name: Create Fresh Flutter Structure & Sync Code
+      run: |
+        # Backup current main.dart and pubspec.yaml if they exist
+        mkdir -p backup
+        if [ -f "lib/main.dart" ]; then cp lib/main.dart backup/; fi
+        if [ -f "pubspec.yaml" ]; then cp pubspec.yaml backup/; fi
+        
+        # Create a fresh clean flutter project in a temp folder
+        flutter create --org com.viziaglobal . --overwrite
+        
+        # Restore user's main.dart and pubspec.yaml back into the fresh structure
+        if [ -f "backup/main.dart" ]; then cp backup/main.dart lib/; fi
+        if [ -f "backup/pubspec.yaml" ]; then cp backup/pubspec.yaml ./; fi
+
     - name: Install Dependencies
       run: flutter pub get
 
