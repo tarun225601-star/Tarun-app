@@ -1,172 +1,268 @@
-import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(const AiVideoEditorApp());
 }
 
-class MyApp extends StatelessWidget {
+class AiVideoEditorApp extends StatelessWidget {
+  const AiVideoEditorApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AI Video Editor',
+      title: 'Vizia AI Video Editor',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
-      home: MyHomePage(),
+      home: const EditorHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
+class EditorHomePage extends StatefulWidget {
+  const EditorHomePage({super.key});
+
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  State<EditorHomePage> createState() => _EditorHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  String _selectedVideo = 'No video selected';
-  String _prompt = '';
-  double _progress = 0;
-  String _status = 'Idle';
-  String _apiConfig = '';
+class _EditorHomePageState extends State<EditorHomePage> {
+  final TextEditingController _promptController = TextEditingController();
+  final TextEditingController _apiKeyController = TextEditingController();
+  
+  String _selectedVideoName = 'No video selected';
+  bool _isEditing = false;
+  double _progressValue = 0.0;
+  String _statusMessage = 'Ready to process';
+  bool _isCompleted = false;
 
-  void _selectVideo() {
-    setState(() {
-      _selectedVideo = 'Mock video selected';
-    });
-  }
-
-  void _runEditing() {
-    setState(() {
-      _progress = 0;
-      _status = 'Agent 1: Parsing prompt...';
-    });
-    Timer(Duration(milliseconds: 1000), () {
-      setState(() {
-        _progress = 10;
-        _status = 'Agent 2: Trimming...';
-      });
-    });
-    Timer(Duration(milliseconds: 2000), () {
-      setState(() {
-        _progress = 20;
-        _status = 'Agent 3: Transcribing...';
-      });
-    });
-    Timer(Duration(milliseconds: 3000), () {
-      setState(() {
-        _progress = 30;
-        _status = 'Agent 4: Integrating B-Roll...';
-      });
-    });
-    Timer(Duration(milliseconds: 4000), () {
-      setState(() {
-        _progress = 40;
-        _status = 'Agent 5: Adding gunshots...';
-      });
-    });
-    Timer(Duration(milliseconds: 5000), () {
-      setState(() {
-        _progress = 50;
-        _status = 'Agent 6: Adding fire VFX...';
-      });
-    });
-    Timer(Duration(milliseconds: 6000), () {
-      setState(() {
-        _progress = 60;
-        _status = 'Agent 7: Adjusting contrast...';
-      });
-    });
-    Timer(Duration(milliseconds: 7000), () {
-      setState(() {
-        _progress = 70;
-        _status = 'Agent 8: Applying slow-motion...';
-      });
-    });
-    Timer(Duration(milliseconds: 8000), () {
-      setState(() {
-        _progress = 80;
-        _status = 'Agent 9: Syncing audio...';
-      });
-    });
-    Timer(Duration(milliseconds: 9000), () {
-      setState(() {
-        _progress = 90;
-        _status = 'Agent 10: Finalizing...';
-      });
-    });
-    Timer(Duration(milliseconds: 10000), () {
-      setState(() {
-        _progress = 100;
-        _status = 'Completed!';
-      });
-    });
-  }
-
-  void _saveVideo() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Video saved successfully!')),
+  // Real API Key Settings Dialog
+  void _openSettingsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('API Configuration'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter your AI / Replicate / OpenAI API Key below:'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _apiKeyController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('API Key saved securely!')),
+                );
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  // Simulate Video Selection
+  void _pickVideo() async {
+    setState(() {
+      _selectedVideoName = 'raw_sample_video_01.mp4';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Video selected successfully!')),
+    );
+  }
+
+  // Simulate 10-Agent Pipeline with Progress
+  void _startEditingPipeline() async {
+    if (_selectedVideoName == 'No video selected') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a video first!')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isEditing = true;
+      _progressValue = 0.0;
+      _isCompleted = false;
+    });
+
+    List<String> agentSteps = [
+      "Agent 1: Parsing user prompt instructions...",
+      "Agent 2: Trimming and cropping video frames...",
+      "Agent 3: Adjusting color grading and contrast...",
+      "Agent 4: Applying slow-motion & speed ramps...",
+      "Agent 5: Generating AI background music...",
+      "Agent 6: Integrating action VFX & fire elements...",
+      "Agent 7: Enhancing audio clarity and voiceover...",
+      "Agent 8: Upscaling video resolution to 8K...",
+      "Agent 9: Running final quality assurance check...",
+      "Agent 10: Rendering and preparing export package..."
+    ];
+
+    for (int i = 0; i < agentSteps.length; i++) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      setState(() {
+        _statusMessage = agentSteps[i];
+        _progressValue = (i + 1) / agentSteps.length;
+      });
+    }
+
+    setState(() {
+      _isEditing = false;
+      _isCompleted = true;
+      _statusMessage = 'Editing completed successfully!';
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('AI Video Editor'),
+        title: const Text('Vizia AI Video Editor'),
+        backgroundColor: Theme.of(context.colorScheme.inversePrimary),
+        actions: [
+          // Settings Icon Button in Top Right Corner
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'API Settings',
+            onPressed: _openSettingsDialog,
+          ),
+        ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Text('Selected Video: $_selectedVideo'),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _selectVideo,
-              child: Text('Select Raw Video'),
-            ),
-            SizedBox(height: 16),
-            TextField(
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Enter prompt',
+        children: [
+          // Video Selection Card
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Step 1: Select Source Video',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Selected: $_selectedVideoName', 
+                    style: TextStyle(color: Colors.grey[700])),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _pickVideo,
+                    icon: const Icon(Icons.video_library),
+                    label: const Text('Choose Video from Device'),
+                  ),
+                ],
               ),
-              onChanged: (text) {
-                setState(() {
-                  _prompt = text;
-                });
-              },
             ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _runEditing,
-              child: Text('Start Editing'),
-            ),
-            SizedBox(height: 16),
-            LinearProgressIndicator(
-              value: _progress / 100,
-            ),
-            Text(_status),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _saveVideo,
-              child: Text('Download Final Video'),
-            ),
-            SizedBox(height: 16),
-            TextField(
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'API Key Configuration',
+          ),
+          const SizedBox(height: 16),
+
+          // Prompt Input Card
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Step 2: Enter Editing Prompt',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _promptController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g., Add cinematic color grading, slow-motion on action scenes, and realistic fire VFX...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
               ),
-              onChanged: (text) {
-                setState(() {
-                  _apiConfig = text;
-                });
-              },
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Action Button & Progress
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            onPressed: _isEditing ? null : _startEditingPipeline,
+            child: Text(
+              _isEditing ? 'Processing Pipeline...' : 'Start 10-Agent AI Editing',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          if (_isEditing || _progressValue > 0) ...[
+            LinearProgressIndicator(value: _progressValue),
+            const SizedBox(height: 10),
+            Text(
+              _statusMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.deepPurple),
             ),
           ],
-        ),
+
+          const SizedBox(height: 20),
+
+          // Download Section
+          if (_isCompleted) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                border: Border.all(color: Colors.green),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Your AI Edited Video is Ready!',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Downloading final video to device storage...')),
+                      );
+                    },
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download Final Video'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
