@@ -38,7 +38,6 @@ class _EditorHomePageState extends State<EditorHomePage> {
   String _statusMessage = 'Ready to process';
   bool _isCompleted = false;
 
-  // Real API Key Settings Dialog
   void _openSettingsDialog() {
     showDialog(
       context: context,
@@ -80,7 +79,6 @@ class _EditorHomePageState extends State<EditorHomePage> {
     );
   }
 
-  // Simulate Video Selection
   void _pickVideo() async {
     setState(() {
       _selectedVideoName = 'raw_sample_video_01.mp4';
@@ -90,7 +88,6 @@ class _EditorHomePageState extends State<EditorHomePage> {
     );
   }
 
-  // Simulate 10-Agent Pipeline with Progress
   void _startEditingPipeline() async {
     if (_selectedVideoName == 'No video selected') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -135,12 +132,13 @@ class _EditorHomePageState extends State<EditorHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Vizia AI Video Editor'),
-        backgroundColor: Theme.of(context.colorScheme.inversePrimary),
+        backgroundColor: colorScheme.inversePrimary,
         actions: [
-          // Settings Icon Button in Top Right Corner
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'API Settings',
@@ -150,119 +148,113 @@ class _EditorHomePageState extends State<EditorHomePage> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        children: [
-          // Video Selection Card
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Step 1: Select Source Video',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Selected: $_selectedVideoName', 
-                    style: TextStyle(color: Colors.grey[700])),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    onPressed: _pickVideo,
-                    icon: const Icon(Icons.video_library),
-                    label: const Text('Choose Video from Device'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Prompt Input Card
-          Card(
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Step 2: Enter Editing Prompt',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _promptController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g., Add cinematic color grading, slow-motion on action scenes, and realistic fire VFX...',
-                      border: OutlineInputBorder(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Step 1: Select Source Video',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Text('Selected: $_selectedVideoName', 
+                      style: TextStyle(color: Colors.grey[700])),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _pickVideo,
+                      icon: const Icon(Icons.video_library),
+                      label: const Text('Choose Video from Device'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-
-          // Action Button & Progress
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+            const SizedBox(height: 16),
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Step 2: Enter Editing Prompt',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _promptController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g., Add cinematic color grading, slow-motion on action scenes, and realistic fire VFX...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            onPressed: _isEditing ? null : _startEditingPipeline,
-            child: Text(
-              _isEditing ? 'Processing Pipeline...' : 'Start 10-Agent AI Editing',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onPressed: _isEditing ? null : _startEditingPipeline,
+              child: Text(
+                _isEditing ? 'Processing Pipeline...' : 'Start 10-Agent AI Editing',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-
-          if (_isEditing || _progressValue > 0) ...[
-            LinearProgressIndicator(value: _progressValue),
-            const SizedBox(height: 10),
-            Text(
-              _statusMessage,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.deepPurple),
-            ),
+            const SizedBox(height: 20),
+            if (_isEditing || _progressValue > 0) ...[
+              LinearProgressIndicator(value: _progressValue),
+              const SizedBox(height: 10),
+              Text(
+                _statusMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.deepPurple),
+              ),
+            ],
+            const SizedBox(height: 20),
+            if (_isCompleted) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  border: Border.all(color: Colors.green),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Your AI Edited Video is Ready!',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Downloading final video to device storage...')),
+                        );
+                      },
+                      icon: const Icon(Icons.download),
+                      label: const Text('Download Final Video'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
-
-          const SizedBox(height: 20),
-
-          // Download Section
-          if (_isCompleted) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green[50],
-                border: Border.all(color: Colors.green),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    'Your AI Edited Video is Ready!',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Downloading final video to device storage...')),
-                      );
-                    },
-                    icon: const Icon(Icons.download),
-                    label: const Text('Download Final Video'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
