@@ -1,9 +1,7 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 void main() {
   runApp(const MyApp());
@@ -17,8 +15,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Vizia Global Studio',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: const Color(0xFF2F2F2F),
+        primarySwatch: Colors.cyan,
+        scaffoldBackgroundColor: const Color(0xFF1A1D23),
       ),
       home: const MyHomePage(),
     );
@@ -33,92 +31,132 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final _formKey = GlobalKey<FormState>();
   String _groqApiKey = '';
   String _aiVideoUpscaleApiKey = '';
   String _aiEnhancementDenoisingApiKey = '';
-  String _selectedVideoPath = '';
-  double _progress = 0;
+  String _selectedVideoFilePath = '';
   bool _isProcessing = false;
-  String _activeAgent = '';
-  String _activeAgentDescription = '';
+  double _progress = 0;
+  int _currentAgent = 0;
+  final List<String> _agents = [
+    'Ingestion & Frame Splitter',
+    'Noise & Grain Remover',
+    'Super-Resolution Upscaler (8K synthesis)',
+    'Face Restoration & Details',
+    'Cinematic Color Grader',
+    'HDR & Lighting Enhancer',
+    'Frame Interpolation (Fluid 60fps)',
+    'Audio Sync & Noise Gate',
+    'AI Compression & Bitrate Optimizer',
+    'Final Rendering & Cloud Deliverer',
+  ];
 
-  Future<void> _saveApiKeys() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('groqApiKey', _groqApiKey);
-    await prefs.setString('aiVideoUpscaleApiKey', _aiVideoUpscaleApiKey);
-    await prefs.setString('aiEnhancementDenoisingApiKey', _aiEnhancementDenoisingApiKey);
-  }
+  Future<void> _showSettingsDialog() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final TextEditingController groqApiKeyController = TextEditingController(text: _groqApiKey);
+    final TextEditingController aiVideoUpscaleApiKeyController = TextEditingController(text: _aiVideoUpscaleApiKey);
+    final TextEditingController aiEnhancementDenoisingApiKeyController = TextEditingController(text: _aiEnhancementDenoisingApiKey);
 
-  Future<void> _loadApiKeys() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _groqApiKey = prefs.getString('groqApiKey') ?? '';
-      _aiVideoUpscaleApiKey = prefs.getString('aiVideoUpscaleApiKey') ?? '';
-      _aiEnhancementDenoisingApiKey = prefs.getString('aiEnhancementDenoisingApiKey') ?? '';
-    });
-  }
-
-  Future<void> _selectVideo() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp4', 'mov', 'avi', 'mkv'],
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('API Key Settings'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: groqApiKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'Groq API Key',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: aiVideoUpscaleApiKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'AI Video Upscale API Key',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: aiEnhancementDenoisingApiKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'AI Enhancement & Denoising API Key',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () async {
+                _groqApiKey = groqApiKeyController.text;
+                _aiVideoUpscaleApiKey = aiVideoUpscaleApiKeyController.text;
+                _aiEnhancementDenoisingApiKey = aiEnhancementDenoisingApiKeyController.text;
+                await prefs.setString('groqApiKey', _groqApiKey);
+                await prefs.setString('aiVideoUpscaleApiKey', _aiVideoUpscaleApiKey);
+                await prefs.setString('aiEnhancementDenoisingApiKey', _aiEnhancementDenoisingApiKey);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
-    if (result != null) {
+  }
+
+  Future<void> _selectVideoFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp4', 'mkv', 'mov', 'avi'],
+    );
+
+    if (result != null && result.files.single.path != null) {
       setState(() {
-        _selectedVideoPath = result.files.single.path ?? '';
+        _selectedVideoFilePath = result.files.single.path!;
       });
     }
   }
 
   Future<void> _startProcessing() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    _groqApiKey = (await prefs.getString('groqApiKey')) ?? '';
+    _aiVideoUpscaleApiKey = (await prefs.getString('aiVideoUpscaleApiKey')) ?? '';
+    _aiEnhancementDenoisingApiKey = (await prefs.getString('aiEnhancementDenoisingApiKey')) ?? '';
+
     if (_groqApiKey.isEmpty || _aiVideoUpscaleApiKey.isEmpty || _aiEnhancementDenoisingApiKey.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter all API keys')),
+        const SnackBar(content: Text('API keys are missing. Please set them in the settings.')),
       );
       return;
     }
-    if (_selectedVideoPath.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a video file')),
-      );
-      return;
-    }
+
     setState(() {
       _isProcessing = true;
-      _progress = 0;
-      _activeAgent = '';
-      _activeAgentDescription = '';
     });
-    final agents = [
-      {'name': 'Ingestion & Frame Splitter', 'description': 'Splitting video into frames'},
-      {'name': 'Noise & Grain Remover', 'description': 'Removing noise and grain from frames'},
-      {'name': 'Super-Resolution Upscaler', 'description': 'Upscaling frames to 8K'},
-      {'name': 'Face Restoration & Details', 'description': 'Restoring face details'},
-      {'name': 'Cinematic Color Grader', 'description': 'Applying cinematic color grade'},
-      {'name': 'HDR & Lighting Enhancer', 'description': 'Enhancing HDR and lighting'},
-      {'name': 'Frame Interpolation', 'description': 'Interpolating frames for smooth playback'},
-      {'name': 'Audio Sync & Noise Gate', 'description': 'Synchronizing audio and removing noise'},
-      {'name': 'AI Compression & Bitrate Optimizer', 'description': 'Optimizing compression and bitrate'},
-      {'name': 'Final Rendering & Cloud Deliverer', 'description': 'Rendering final video and delivering to cloud'},
-    ];
-    for (var i = 0; i < agents.length; i++) {
+
+    for (int i = 0; i < _agents.length; i++) {
       setState(() {
-        _activeAgent = agents[i]['name'] ?? '';
-        _activeAgentDescription = agents[i]['description'] ?? '';
-        _progress = (i + 1) / agents.length;
+        _currentAgent = i;
+        _progress = (i + 1) / _agents.length * 100;
       });
+
       await Future.delayed(const Duration(milliseconds: 500));
     }
+
     setState(() {
       _isProcessing = false;
     });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadApiKeys();
   }
 
   @override
@@ -129,92 +167,7 @@ class _MyHomePageState extends State<MyHomePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    title: const Text('API Key Settings'),
-                    content: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextFormField(
-                            initialValue: _groqApiKey,
-                            decoration: const InputDecoration(
-                              labelText: 'Groq API Key',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter Groq API Key';
-                              }
-                              return null;
-                            },
-                            onSaved: (value) {
-                              _groqApiKey = value ?? '';
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            initialValue: _aiVideoUpscaleApiKey,
-                            decoration: const InputDecoration(
-                              labelText: 'AI Video Upscale API Key',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter AI Video Upscale API Key';
-                              }
-                              return null;
-                            },
-                            onSaved: (value) {
-                              _aiVideoUpscaleApiKey = value ?? '';
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            initialValue: _aiEnhancementDenoisingApiKey,
-                            decoration: const InputDecoration(
-                              labelText: 'AI Enhancement & Denoising API Key',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter AI Enhancement & Denoising API Key';
-                              }
-                              return null;
-                            },
-                            onSaved: (value) {
-                              _aiEnhancementDenoisingApiKey = value ?? '';
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        child: const Text('Cancel'),
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                      ),
-                      TextButton(
-                        child: const Text('Save'),
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            _formKey.currentState!.save();
-                            _saveApiKeys();
-                            Navigator.of(context).pop();
-                          }
-                        },
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
+            onPressed: _showSettingsDialog,
           ),
         ],
       ),
@@ -223,9 +176,11 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           children: [
             ElevatedButton(
-              onPressed: _selectVideo,
-              child: Text(_selectedVideoPath.isEmpty ? 'Select Video from Device' : _selectedVideoPath),
+              onPressed: _selectVideoFile,
+              child: const Text('Select Video from Device'),
             ),
+            const SizedBox(height: 16),
+            Text(_selectedVideoFilePath),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _startProcessing,
@@ -233,18 +188,12 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             const SizedBox(height: 16),
             LinearProgressIndicator(
-              value: _progress,
+              value: _progress / 100,
+              backgroundColor: Colors.cyan[100],
+              color: Colors.cyan,
             ),
             const SizedBox(height: 16),
-            Text(
-              _activeAgent,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _activeAgentDescription,
-              style: const TextStyle(fontSize: 16),
-            ),
+            Text(_isProcessing ? '${_agents[_currentAgent]} (${_progress}%)' : 'Not processing'),
           ],
         ),
       ),
