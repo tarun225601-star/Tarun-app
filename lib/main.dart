@@ -31,61 +31,105 @@ class _MyHomePageState extends State<MyHomePage> {
   final _formKey = GlobalKey<FormState>();
   final _promptController = TextEditingController();
   final _videoController = TextEditingController();
-  String? _replicateApiKey;
+  String _replicateApiKey = '';
+  String _processingStatus = '';
   bool _isProcessing = false;
-  String? _processedVideoUrl;
+  File? _editedVideo;
 
-  Future<void> _saveApiKey() async {
+  Future<void> _saveReplicateApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('replicateApiKey', _replicateApiKey!);
+    await prefs.setString('replicateApiKey', _replicateApiKey);
   }
 
-  Future<void> _loadApiKey() async {
+  Future<void> _loadReplicateApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    _replicateApiKey = prefs.getString('replicateApiKey');
-    setState(() {});
+    setState(() {
+      _replicateApiKey = prefs.getString('replicateApiKey') ?? '';
+    });
   }
 
   Future<void> _processVideo() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isProcessing = true;
+        _processingStatus = 'Uploading video...';
       });
-      try {
-        final response = await http.post(
-          Uri.parse('https://api.replicate.ai/predict'),
+
+      final videoFile = File(_videoController.text);
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://api.replicate.ai/predictions'),
+      );
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'video',
+          await videoFile.readAsBytes(),
+          filename: videoFile.path.split('/').last,
+        ),
+      );
+      request.headers['Authorization'] = 'Bearer $_replicateApiKey';
+      request.headers['Content-Type'] = 'multipart/form-data';
+
+      final response = await request.send();
+      if (response.statusCode == 201) {
+        setState(() {
+          _processingStatus = 'Processing video...';
+        });
+
+        final predictionId = jsonDecode(await response.stream.bytesToString())['id'];
+        final getPredictionUrl = 'https://api.replicate.ai/predictions/$predictionId';
+        final getPredictionResponse = await http.get(
+          Uri.parse(getPredictionUrl),
           headers: {
             'Authorization': 'Bearer $_replicateApiKey',
-            'Content-Type': 'application/json',
           },
-          body: jsonEncode({
-            'version': 'latest',
-            'input': {
-              'video': _videoController.text,
-              'prompt': _promptController.text,
-            },
-          }),
         );
-        if (response.statusCode == 200) {
-          final jsonData = jsonDecode(response.body);
-          _processedVideoUrl = jsonData['output'];
-          setState(() {});
+
+        if (getPredictionResponse.statusCode == 200) {
+          final predictionStatus = jsonDecode(getPredictionResponse.body)['status'];
+          if (predictionStatus == 'succeeded') {
+            setState(() {
+              _processingStatus = 'Downloading edited video...';
+            });
+
+            final editedVideoUrl = jsonDecode(getPredictionResponse.body)['output'];
+            final editedVideoResponse = await http.get(
+              Uri.parse(editedVideoUrl),
+              headers: {
+                'Authorization': 'Bearer $_replicateApiKey',
+              },
+            );
+
+            if (editedVideoResponse.statusCode == 200) {
+              final editedVideoFile = File('edited_video.mp4');
+              await editedVideoFile.writeAsBytes(editedVideoResponse.bodyBytes);
+              setState(() {
+                _editedVideo = editedVideoFile;
+                _isProcessing = false;
+                _processingStatus = 'Edited video downloaded';
+              });
+            } else {
+              setState(() {
+                _isProcessing = false;
+                _processingStatus = 'Error downloading edited video';
+              });
+            }
+          } else {
+            setState(() {
+              _isProcessing = false;
+              _processingStatus = 'Error processing video';
+            });
+          }
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${response.statusCode}'),
-            ),
-          );
+          setState(() {
+            _isProcessing = false;
+            _processingStatus = 'Error getting prediction';
+          });
         }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-          ),
-        );
-      } finally {
+      } else {
         setState(() {
           _isProcessing = false;
+          _processingStatus = 'Error uploading video';
         });
       }
     }
@@ -94,14 +138,14 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    _loadApiKey();
+    _loadReplicateApiKey();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Video Editing App'),
+        title: const Text('YouTube Video Editor'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -111,10 +155,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 MaterialPageRoute(
                   builder: (context) => SettingsScreen(
                     replicateApiKey: _replicateApiKey,
-                    onSave: (apiKey) {
-                      _replicateApiKey = apiKey;
-                      _saveApiKey();
-                    },
+                    saveReplicateApiKey: _saveReplicateApiKey,
                   ),
                 ),
               );
@@ -131,22 +172,19 @@ class _MyHomePageState extends State<MyHomePage> {
               TextFormField(
                 controller: _videoController,
                 decoration: const InputDecoration(
-                  labelText: 'Video URL',
-                  border: OutlineInputBorder(),
+                  labelText: 'Video input field',
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter a video URL';
+                    return 'Please enter a video file path';
                   }
                   return null;
                 },
               ),
-              const SizedBox(height: 20),
               TextFormField(
                 controller: _promptController,
                 decoration: const InputDecoration(
-                  labelText: 'Prompt',
-                  border: OutlineInputBorder(),
+                  labelText: 'Prompt text box',
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -157,47 +195,21 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: _isProcessing
-                    ? null
-                    : _processVideo,
+                onPressed: _processVideo,
                 child: const Text('Process Video'),
               ),
               const SizedBox(height: 20),
-              _isProcessing
-                  ? const CircularProgressIndicator()
-                  : _processedVideoUrl != null
-                      ? ElevatedButton(
-                          onPressed: () async {
-                            final url = _processedVideoUrl;
-                            if (url != null) {
-                              await http.get(
-                                Uri.parse(url),
-                                headers: {
-                                  'Authorization': 'Bearer $_replicateApiKey',
-                                },
-                              ).then((response) {
-                                if (response.statusCode == 200) {
-                                  final file = File('output.mp4');
-                                  file.writeAsBytes(response.bodyBytes).then((_) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Video saved to ${file.path}'),
-                                      ),
-                                    );
-                                  });
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Error: ${response.statusCode}'),
-                                    ),
-                                  );
-                                }
-                              });
-                            }
-                          },
-                          child: const Text('Download Video'),
-                        )
-                      : const Text('No video processed'),
+              Text(_processingStatus),
+              const SizedBox(height: 20),
+              _editedVideo != null
+                  ? ElevatedButton(
+                      onPressed: () {
+                        // Download edited video
+                        // TODO: Implement download logic
+                      },
+                      child: const Text('Download Edited Video'),
+                    )
+                  : const Text('No edited video available'),
             ],
           ),
         ),
@@ -207,13 +219,13 @@ class _MyHomePageState extends State<MyHomePage> {
 }
 
 class SettingsScreen extends StatefulWidget {
-  final String? replicateApiKey;
-  final Function(String) onSave;
+  final String replicateApiKey;
+  final Function saveReplicateApiKey;
 
   const SettingsScreen({
     Key? key,
     required this.replicateApiKey,
-    required this.onSave,
+    required this.saveReplicateApiKey,
   }) : super(key: key);
 
   @override
@@ -221,13 +233,12 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _apiKeyController = TextEditingController();
+  final _replicateApiKeyController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _apiKeyController.text = widget.replicateApiKey ?? '';
+    _replicateApiKeyController.text = widget.replicateApiKey;
   }
 
   @override
@@ -238,38 +249,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _apiKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'Replicate API Key',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a Replicate API Key';
-                  }
-                  return null;
-                },
+        child: Column(
+          children: [
+            TextFormField(
+              controller: _replicateApiKeyController,
+              decoration: const InputDecoration(
+                labelText: 'Replicate API Key',
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    widget.onSave(_apiKeyController.text);
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                widget.saveReplicateApiKey();
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
       ),
     );
   }
 }
+```
+
+In `android/app/src/main/AndroidManifest.xml`, add the following line inside the `<application>` tag:
+
+```xml
+<meta-data android:name="flutterEmbedding" android:value="2" />
+```
+
+Also, add the following line to request internet permission:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
 ```
