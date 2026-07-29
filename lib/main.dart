@@ -10,12 +10,8 @@ class CalculatorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Simple Calculator',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const CalculatorPage(),
+    return const MaterialApp(
+      home: CalculatorPage(),
     );
   }
 }
@@ -28,17 +24,71 @@ class CalculatorPage extends StatefulWidget {
 }
 
 class _CalculatorPageState extends State<CalculatorPage> {
-  final _textController = TextEditingController();
-  double _num1 = 0;
-  double _num2 = 0;
+  final _textController = TextEditingController(text: '0');
+  double _firstNumber = 0;
+  double _secondNumber = 0;
   String _operator = '';
-  String _result = '';
+  bool _isFirstNumber = true;
+
+  void _onNumberPressed(String number) {
+    if (_isFirstNumber) {
+      if (_textController.text == '0') {
+        _textController.text = number;
+        _firstNumber = double.parse(number);
+      } else {
+        _textController.text += number;
+        _firstNumber = double.parse(_textController.text);
+      }
+    } else {
+      if (_textController.text == '0') {
+        _textController.text = number;
+        _secondNumber = double.parse(number);
+      } else {
+        _textController.text += number;
+        _secondNumber = double.parse(_textController.text);
+      }
+    }
+  }
+
+  void _onOperatorPressed(String operator) {
+    _operator = operator;
+    _isFirstNumber = false;
+    _textController.text = '0';
+  }
+
+  void _onClearPressed() {
+    _textController.text = '0';
+    _firstNumber = 0;
+    _secondNumber = 0;
+    _operator = '';
+    _isFirstNumber = true;
+  }
+
+  void _onEqualsPressed() {
+    if (_operator == '+') {
+      _textController.text = (_firstNumber + _secondNumber).toString();
+    } else if (_operator == '-') {
+      _textController.text = (_firstNumber - _secondNumber).toString();
+    } else if (_operator == '*') {
+      _textController.text = (_firstNumber * _secondNumber).toString();
+    } else if (_operator == '/') {
+      if (_secondNumber != 0) {
+        _textController.text = (_firstNumber / _secondNumber).toString();
+      } else {
+        _textController.text = 'Error';
+      }
+    }
+    _firstNumber = double.parse(_textController.text);
+    _secondNumber = 0;
+    _operator = '';
+    _isFirstNumber = true;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Simple Calculator'),
+        title: const Text('Calculator'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -47,215 +97,109 @@ class _CalculatorPageState extends State<CalculatorPage> {
             TextField(
               controller: _textController,
               readOnly: true,
+              textAlign: TextAlign.right,
               style: const TextStyle(fontSize: 24),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-              ),
             ),
             const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '7';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('7'),
                   child: const Text('7'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '8';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('8'),
                   child: const Text('8'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '9';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('9'),
                   child: const Text('9'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '/';
-                    });
-                  },
+                  onPressed: () => _onOperatorPressed('/'),
                   child: const Text('/'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '4';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('4'),
                   child: const Text('4'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '5';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('5'),
                   child: const Text('5'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '6';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('6'),
                   child: const Text('6'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '*';
-                    });
-                  },
+                  onPressed: () => _onOperatorPressed('*'),
                   child: const Text('*'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '1';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('1'),
                   child: const Text('1'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '2';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('2'),
                   child: const Text('2'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '3';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('3'),
                   child: const Text('3'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '-';
-                    });
-                  },
+                  onPressed: () => _onOperatorPressed('-'),
                   child: const Text('-'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '0';
-                    });
-                  },
+                  onPressed: () => _onNumberPressed('0'),
                   child: const Text('0'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '.';
-                    });
-                  },
-                  child: const Text('.'),
+                  onPressed: _onClearPressed,
+                  child: const Text('C'),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _textController.text += '+';
-                    });
-                  },
-                  child: const Text('+'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _calculateResult();
-                    });
-                  },
+                  onPressed: _onEqualsPressed,
                   child: const Text('='),
                 ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => _onOperatorPressed('+'),
+                  child: const Text('+'),
+                ),
               ],
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _textController.clear();
-                  _result = '';
-                });
-              },
-              child: const Text('Clear'),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _result,
-              style: const TextStyle(fontSize: 24),
             ),
           ],
         ),
       ),
     );
-  }
-
-  void _calculateResult() {
-    try {
-      _result = _calculate(_textController.text);
-      _textController.text = _result;
-    } catch (e) {
-      _result = 'Error';
-    }
-  }
-
-  String _calculate(String equation) {
-    final List<String> parts = equation.split(RegExp(r'([+*/-])'));
-    _num1 = double.parse(parts[0]);
-    _operator = parts[1];
-    _num2 = double.parse(parts[2]);
-
-    switch (_operator) {
-      case '+':
-        return (_num1 + _num2).toString();
-      case '-':
-        return (_num1 - _num2).toString();
-      case '*':
-        return (_num1 * _num2).toString();
-      case '/':
-        if (_num2 != 0) {
-          return (_num1 / _num2).toString();
-        } else {
-          throw Exception('Cannot divide by zero');
-        }
-      default:
-        throw Exception('Invalid operator');
-    }
   }
 }
 ```
