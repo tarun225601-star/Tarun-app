@@ -24,43 +24,57 @@ class CalculatorHomePage extends StatefulWidget {
 }
 
 class _CalculatorHomePageState extends State<CalculatorHomePage> {
-  final TextEditingController _textController = TextEditingController();
-  final List<String> _history = [];
-  String _currentExpression = '';
+  String _currentNumber = '';
+  String _history = '';
+  double? _currentResult;
 
   void _onButtonPressed(String value) {
     setState(() {
       if (value == 'C') {
-        _currentExpression = '';
-        _textController.clear();
+        _currentNumber = '';
+        _history = '';
+        _currentResult = null;
       } else if (value == '=') {
         try {
-          final result = _calculate(_currentExpression);
-          _history.add('$_currentExpression = $result');
-          _currentExpression = result.toString();
-          _textController.text = _currentExpression;
+          _currentResult = _calculateResult(_currentNumber);
+          _history = _currentNumber + ' = ' + _currentResult.toString();
+          _currentNumber = _currentResult.toString();
         } catch (e) {
-          _textController.text = 'Error';
+          _history = 'Error: ' + e.toString();
+          _currentNumber = '';
         }
       } else {
-        _currentExpression += value;
-        _textController.text = _currentExpression;
+        _currentNumber += value;
+        _history = _currentNumber;
       }
     });
   }
 
-  double _calculate(String expression) {
-    return Function.apply(
-      (String exp) => double.parse(
-        exp
-            .replaceAll('+', ' + ')
-            .replaceAll('-', ' - ')
-            .replaceAll('*', ' * ')
-            .replaceAll('/', ' / ')
-            .replaceAll(' ', ' '),
-      ),
-      [expression],
-    );
+  double? _calculateResult(String equation) {
+    try {
+      return _parseEquation(equation);
+    } catch (e) {
+      throw Exception('Error parsing equation: $e');
+    }
+  }
+
+  double _parseEquation(String equation) {
+    equation = equation.replaceAll(' ', '');
+    if (equation.contains('+')) {
+      final parts = equation.split('+');
+      return _parseEquation(parts[0]) + _parseEquation(parts[1]);
+    } else if (equation.contains('-')) {
+      final parts = equation.split('-');
+      return _parseEquation(parts[0]) - _parseEquation(parts[1]);
+    } else if (equation.contains('*')) {
+      final parts = equation.split('*');
+      return _parseEquation(parts[0]) * _parseEquation(parts[1]);
+    } else if (equation.contains('/')) {
+      final parts = equation.split('/');
+      return _parseEquation(parts[0]) / _parseEquation(parts[1]);
+    } else {
+      return double.parse(equation);
+    }
   }
 
   @override
@@ -73,127 +87,96 @@ class _CalculatorHomePageState extends State<CalculatorHomePage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            TextField(
-              controller: _textController,
-              readOnly: true,
-              style: const TextStyle(fontSize: 24),
+            Expanded(
+              child: TextField(
+                readOnly: true,
+                controller: TextEditingController(text: _currentNumber),
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'Enter a number',
+                ),
+              ),
             ),
+            const SizedBox(height: 16),
+            Text(_history),
             const SizedBox(height: 16),
             GridView.count(
               shrinkWrap: true,
               crossAxisCount: 4,
-              childAspectRatio: 1,
+              childAspectRatio: 1.5,
               children: [
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '7',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('7'),
+                  child: const Text('7'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '8',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('8'),
+                  child: const Text('8'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '9',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('9'),
+                  child: const Text('9'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '/',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('/'),
+                  child: const Text('/'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '4',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('4'),
+                  child: const Text('4'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '5',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('5'),
+                  child: const Text('5'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '6',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('6'),
+                  child: const Text('6'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '*',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('*'),
+                  child: const Text('*'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '1',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('1'),
+                  child: const Text('1'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '2',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('2'),
+                  child: const Text('2'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '3',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('3'),
+                  child: const Text('3'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '-',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('-'),
+                  child: const Text('-'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '0',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('0'),
+                  child: const Text('0'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '.',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('.'),
+                  child: const Text('.'),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: 'C',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('='),
+                  child: const Text('='),
                 ),
-                CalculatorButton(
-                  onPressed: _onButtonPressed,
-                  value: '+',
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('+'),
+                  child: const Text('+'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _onButtonPressed('C'),
+                  child: const Text('C'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _history.add(_textController.text);
-                  _textController.clear();
-                  _currentExpression = '';
-                });
-              },
-              child: const Text('Clear History'),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _history.length,
-                itemBuilder: (context, index) {
-                  return Text(_history[_history.length - 1 - index]);
-                },
-              ),
-            ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class CalculatorButton extends StatelessWidget {
-  final Function(String) onPressed;
-  final String value;
-
-  const CalculatorButton({
-    Key? key,
-    required this.onPressed,
-    required this.value,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: () => onPressed(value),
-      child: Text(
-        value,
-        style: const TextStyle(fontSize: 24),
       ),
     );
   }
