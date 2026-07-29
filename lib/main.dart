@@ -1,116 +1,224 @@
-// à¤¯à¤¹ à¤à¤ à¤«à¥à¤²à¤à¤° à¤ªà¥à¤°à¥à¤à¥à¤à¥à¤ à¤¨à¤¹à¥à¤ à¤¹à¥, à¤à¤¸à¤²à¤¿à¤ à¤®à¥à¤à¤¨à¥ à¤à¤ªà¤à¥ à¤à¤¨à¥à¤°à¥à¤§ à¤à¥ à¤à¤¨à¥à¤¸à¤¾à¤° android à¤«à¤¼à¥à¤²à¥à¤¡à¤° à¤¸à¤à¤°à¤à¤¨à¤¾ à¤à¤° à¤à¤µà¤¶à¥à¤¯à¤ à¤«à¤¼à¤¾à¤à¤²à¥à¤ à¤à¤¾ à¤¨à¤¿à¤°à¥à¤®à¤¾à¤£ à¤à¤¿à¤¯à¤¾ à¤¹à¥à¥¤ 
-// à¤¨à¤¿à¤®à¥à¤¨à¤²à¤¿à¤à¤¿à¤¤ à¤«à¤¼à¤¾à¤à¤²à¥à¤ à¤à¥ à¤à¤ªà¤¨à¥ à¤«à¥à¤²à¤à¤° à¤ªà¥à¤°à¥à¤à¥à¤à¥à¤ à¤à¥ android à¤«à¤¼à¥à¤²à¥à¤¡à¤° à¤®à¥à¤ à¤¸à¤¹à¥ à¤ªà¤¥ à¤ªà¤° à¤°à¤à¥à¤:
+```dart
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 
-// android/settings.gradle
-/*
-include ':app'
-
-def localProperties = new File(rootProject.projectDir, "local.properties")
-def properties = new Properties()
-
-assert localProperties.exists()
-localProperties.withReader("UTF-8") { reader ->
-    properties.load(reader)
+void main() {
+  runApp(const MyApp());
 }
 
-def flutterSdkPath = properties.getProperty('flutter.sdk')
-assert flutterSdkPath != null, "Flutter SDK not found. Define location with flutter.sdk in the local.properties file"
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
 
-apply from: "$flutterSdkPath/packages/flutter_tools/gradle/flutter.gradle"
-*/
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Media Editor',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: const SettingsScreen(),
+    );
+  }
+}
 
-// android/build.gradle
-/*
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({Key? key}) : super(key: key);
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _apiKeyController = TextEditingController();
+
+  Future<void> _saveApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('apiKey', _apiKeyController.text);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const PromptScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _apiKeyController,
+              decoration: const InputDecoration(
+                labelText: 'Replicate API Token',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _saveApiKey,
+              child: const Text('Save API Key'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PromptScreen extends StatefulWidget {
+  const PromptScreen({Key? key}) : super(key: key);
+
+  @override
+  State<PromptScreen> createState() => _PromptScreenState();
+}
+
+class _PromptScreenState extends State<PromptScreen> {
+  final _promptController = TextEditingController();
+  File? _imageFile;
+  String _imageUrl = '';
+
+  Future<void> _uploadImage() async {
+    final pickedFile = await FilePicker.platform.pickFile();
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path!);
+        _imageUrl = _imageFile!.path;
+      });
     }
+  }
 
-    dependencies {
-        classpath "com.android.tools.build:gradle:7.2.2"
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.20"
+  Future<void> _sendPrompt() async {
+    final prefs = await SharedPreferences.getInstance();
+    final apiKey = prefs.getString('apiKey');
+    if (apiKey != null) {
+      final response = await http.post(
+        Uri.parse('https://api.replicate.com/v1/predictions'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'version': 'latest',
+          'input': {
+            'prompt': _promptController.text,
+            'negative_prompt': '',
+            'image': _imageUrl,
+          },
+        }),
+      );
+      if (response.statusCode == 201) {
+        final predictionId = response.json()['id'];
+        _pollPrediction(predictionId);
+      } else {
+        _showErrorDialog(response.statusCode);
+      }
     }
-}
+  }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
+  Future<void> _pollPrediction(String predictionId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final apiKey = prefs.getString('apiKey');
+    if (apiKey != null) {
+      while (true) {
+        final response = await http.get(
+          Uri.parse('https://api.replicate.com/v1/predictions/$predictionId'),
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+          },
+        );
+        if (response.statusCode == 200) {
+          final status = response.json()['status'];
+          if (status == 'succeeded') {
+            final output = response.json()['output'];
+            _showOutputDialog(output);
+            break;
+          } else if (status == 'failed') {
+            _showErrorDialog(response.statusCode);
+            break;
+          }
+        } else {
+          _showErrorDialog(response.statusCode);
+          break;
+        }
+        await Future.delayed(const Duration(seconds: 1));
+      }
     }
+  }
+
+  Future<void> _showErrorDialog(int statusCode) async {
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Error'),
+          content: Text('Error $statusCode'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showOutputDialog(String output) async {
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Output'),
+          content: Text(output),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Prompt'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _promptController,
+              decoration: const InputDecoration(
+                labelText: 'Prompt',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _uploadImage,
+              child: const Text('Upload Image'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _sendPrompt,
+              child: const Text('Send Prompt'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
-
-rootProject.buildDir = '../build'
-subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
-}
-subprojects {
-    project.evaluationDependsOn(':app')
-}
-
-task clean(type: Delete) {
-    delete rootProject.buildDir
-}
-*/
-
-// android/app/build.gradle
-/*
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
-}
-
-def flutterRoot = localProperties.getProperty('flutter.sdk')
-if (flutterRoot == null) {
-    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file")
-}
-
-apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
-
-android {
-    compileSdkVersion 33
-
-    defaultConfig {
-        applicationId "com.example.vizia_pro"
-        minSdkVersion 21
-        targetSdkVersion 33
-        versionCode 1
-        versionName "1.0"
-    }
-}
-
-flutter {
-    source '../..'
-}
-*/
-
-// android/app/src/main/AndroidManifest.xml
-/*
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.vizia_pro">
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <application
-        android:label="vizia_pro"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
-        <activity
-            android:name=".MainActivity"
-            android:launchMode="singleTop"
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-*/
+```
