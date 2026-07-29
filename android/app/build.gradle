@@ -1,0 +1,16 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+android {
+    namespace "com.example.ai_generated_app"
+    compileSdk flutter.compileSdkVersion
+    defaultConfig {
+        applicationId "com.example.ai_generated_app"
+        minSdk 21
+        targetSdk flutter.targetSdkVersion
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+}
