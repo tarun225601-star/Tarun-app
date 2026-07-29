@@ -1,51 +1,32 @@
-name: Build APK
+name: Flutter Build
 
-on:
-  push:
-    branches: [ "main", "master" ]
+on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Java
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'oracle'
-        java-version: '17'
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20.x"
 
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.19.0'
-        channel: 'stable'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.16.9'
 
-    - name: Create Clean Structure & Fix Name
-      run: |
-        mkdir -p backup
-        if [ -f "lib/main.dart" ]; then cp lib/main.dart backup/; fi
-        if [ -f "pubspec.yaml" ]; then cp pubspec.yaml backup/; fi
-        
-        # Create fresh project in a subfolder and copy files over
-        flutter create --org com.viziaglobal --project-name tarun_app temp_project
-        cp -r temp_project/* ./
-        rm -rf temp_project
-        
-        if [ -f "backup/main.dart" ]; then cp backup/main.dart lib/; fi
-        if [ -f "backup/pubspec.yaml" ]; then cp backup/pubspec.yaml ./; fi
+      - name: Create Android Structure if missing
+        run: |
+          if [ ! -d "android" ]; then
+            flutter create . --org com.example --project-name ai_generated_app --platforms android
+          fi
 
-    - name: Install Dependencies
-      run: flutter pub get
+      - name: Install Dependencies
+        run: flutter pub get
 
-    - name: Build APK Release
-      run: flutter build apk --release
-
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-apk
-        path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Build APK
+        run: flutter build apk --release
