@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart';
 
 void main() {
   runApp(const MyApp());
@@ -14,8 +16,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: MyHomePage(),
+    return MaterialApp(
+      title: 'YouTube Video Editor',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: const MyHomePage(),
     );
   }
 }
@@ -28,117 +34,134 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final _formKey = GlobalKey<FormState>();
-  final _promptController = TextEditingController();
   final _videoController = TextEditingController();
+  final _promptController = TextEditingController();
   String _replicateApiKey = '';
-  String _processingStatus = '';
   bool _isProcessing = false;
-  File? _editedVideo;
+  double _progress = 0.0;
+  String _ AgentsStatus = '';
+  final List<String> _agents = List.generate(10, (index) => 'Agent ${index + 1}');
+  final List<bool> _agentsStatus = List.generate(10, (index) => false);
 
-  Future<void> _saveReplicateApiKey() async {
+  Future<void> _saveApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('replicateApiKey', _replicateApiKey);
+    prefs.setString('replicateApiKey', _replicateApiKey);
   }
 
-  Future<void> _loadReplicateApiKey() async {
+  Future<void> _loadApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _replicateApiKey = prefs.getString('replicateApiKey') ?? '';
     });
   }
 
-  Future<void> _processVideo() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isProcessing = true;
-        _processingStatus = 'Uploading video...';
-      });
+  Future<void> _uploadVideo() async {
+    final file = File(_videoController.text);
+    final bytes = await file.readAsBytes();
+    final uri = Uri.parse('https://api.replicate.ai/predict');
+    final headers = {
+      'Authorization': 'Bearer $_replicateApiKey',
+      'Content-Type': 'application/octet-stream',
+    };
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(headers);
+    request.files.add(http.MultipartFile.fromBytes(
+      'video',
+      bytes,
+      filename: basename(file.path),
+    ));
+    final response = await request.send();
+    if (response.statusCode == 200) {
+      final json = jsonDecode(await response.stream.bytesToString());
+      _processVideo(json['id']);
+    } else {
+      print('Error: ${response.statusCode}');
+    }
+  }
 
-      final videoFile = File(_videoController.text);
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('https://api.replicate.ai/predictions'),
-      );
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'video',
-          await videoFile.readAsBytes(),
-          filename: videoFile.path.split('/').last,
-        ),
-      );
-      request.headers['Authorization'] = 'Bearer $_replicateApiKey';
-      request.headers['Content-Type'] = 'multipart/form-data';
+  Future<void> _processVideo(String id) async {
+    final uri = Uri.parse('https://api.replicate.ai/predict/$id');
+    final headers = {
+      'Authorization': 'Bearer $_replicateApiKey',
+      'Content-Type': 'application/json',
+    };
+    final request = http.Request('GET', uri);
+    request.headers.addAll(headers);
+    final response = await request.send();
+    if (response.statusCode == 200) {
+      final json = jsonDecode(await response.stream.bytesToString());
+      _updateAgentsStatus(json['status']);
+      if (json['status'] == 'completed') {
+        _downloadVideo(id);
+      } else {
+        _pollStatus(id);
+      }
+    } else {
+      print('Error: ${response.statusCode}');
+    }
+  }
 
+  Future<void> _pollStatus(String id) async {
+    if (_isProcessing) {
+      final uri = Uri.parse('https://api.replicate.ai/predict/$id');
+      final headers = {
+        'Authorization': 'Bearer $_replicateApiKey',
+        'Content-Type': 'application/json',
+      };
+      final request = http.Request('GET', uri);
+      request.headers.addAll(headers);
       final response = await request.send();
-      if (response.statusCode == 201) {
-        setState(() {
-          _processingStatus = 'Processing video...';
-        });
-
-        final predictionId = jsonDecode(await response.stream.bytesToString())['id'];
-        final getPredictionUrl = 'https://api.replicate.ai/predictions/$predictionId';
-        final getPredictionResponse = await http.get(
-          Uri.parse(getPredictionUrl),
-          headers: {
-            'Authorization': 'Bearer $_replicateApiKey',
-          },
-        );
-
-        if (getPredictionResponse.statusCode == 200) {
-          final predictionStatus = jsonDecode(getPredictionResponse.body)['status'];
-          if (predictionStatus == 'succeeded') {
-            setState(() {
-              _processingStatus = 'Downloading edited video...';
-            });
-
-            final editedVideoUrl = jsonDecode(getPredictionResponse.body)['output'];
-            final editedVideoResponse = await http.get(
-              Uri.parse(editedVideoUrl),
-              headers: {
-                'Authorization': 'Bearer $_replicateApiKey',
-              },
-            );
-
-            if (editedVideoResponse.statusCode == 200) {
-              final editedVideoFile = File('edited_video.mp4');
-              await editedVideoFile.writeAsBytes(editedVideoResponse.bodyBytes);
-              setState(() {
-                _editedVideo = editedVideoFile;
-                _isProcessing = false;
-                _processingStatus = 'Edited video downloaded';
-              });
-            } else {
-              setState(() {
-                _isProcessing = false;
-                _processingStatus = 'Error downloading edited video';
-              });
-            }
-          } else {
-            setState(() {
-              _isProcessing = false;
-              _processingStatus = 'Error processing video';
-            });
-          }
+      if (response.statusCode == 200) {
+        final json = jsonDecode(await response.stream.bytesToString());
+        _updateAgentsStatus(json['status']);
+        if (json['status'] == 'completed') {
+          _downloadVideo(id);
         } else {
-          setState(() {
-            _isProcessing = false;
-            _processingStatus = 'Error getting prediction';
-          });
+          _pollStatus(id);
         }
       } else {
-        setState(() {
-          _isProcessing = false;
-          _processingStatus = 'Error uploading video';
-        });
+        print('Error: ${response.statusCode}');
       }
+    }
+  }
+
+  Future<void> _downloadVideo(String id) async {
+    final uri = Uri.parse('https://api.replicate.ai/predict/$id/output');
+    final headers = {
+      'Authorization': 'Bearer $_replicateApiKey',
+      'Content-Type': 'application/octet-stream',
+    };
+    final request = http.Request('GET', uri);
+    request.headers.addAll(headers);
+    final response = await request.send();
+    if (response.statusCode == 200) {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/output.mp4');
+      await file.writeAsBytes(await response.stream.bytesToString());
+      print('Video saved to ${file.path}');
+    } else {
+      print('Error: ${response.statusCode}');
+    }
+  }
+
+  void _updateAgentsStatus(String status) {
+    setState(() {
+      _AgentsStatus = status;
+      _progress = status == 'processing' ? 0.5 : status == 'completed' ? 1.0 : 0.0;
+      _isProcessing = status == 'processing';
+    });
+  }
+
+  void _coordinateAgents() {
+    for (var i = 0; i < _agents.length; i++) {
+      _agentsStatus[i] = true;
     }
   }
 
   @override
   void initState() {
     super.initState();
-    _loadReplicateApiKey();
+    _loadApiKey();
   }
 
   @override
@@ -150,120 +173,76 @@ class _MyHomePageState extends State<MyHomePage> {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsScreen(
-                    replicateApiKey: _replicateApiKey,
-                    saveReplicateApiKey: _saveReplicateApiKey,
-                  ),
-                ),
+              showDialog(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: const Text('Settings'),
+                    content: TextField(
+                      controller: TextEditingController(text: _replicateApiKey),
+                      decoration: const InputDecoration(
+                        labelText: 'Replicate API Key',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (text) {
+                        _replicateApiKey = text;
+                      },
+                    ),
+                    actions: [
+                      TextButton(
+                        child: const Text('Save'),
+                        onPressed: () {
+                          _saveApiKey();
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                    ],
+                  );
+                },
               );
             },
           ),
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _videoController,
-                decoration: const InputDecoration(
-                  labelText: 'Video input field',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a video file path';
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _promptController,
-                decoration: const InputDecoration(
-                  labelText: 'Prompt text box',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a prompt';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _processVideo,
-                child: const Text('Process Video'),
-              ),
-              const SizedBox(height: 20),
-              Text(_processingStatus),
-              const SizedBox(height: 20),
-              _editedVideo != null
-                  ? ElevatedButton(
-                      onPressed: () {
-                        // Download edited video
-                        // TODO: Implement download logic
-                      },
-                      child: const Text('Download Edited Video'),
-                    )
-                  : const Text('No edited video available'),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SettingsScreen extends StatefulWidget {
-  final String replicateApiKey;
-  final Function saveReplicateApiKey;
-
-  const SettingsScreen({
-    Key? key,
-    required this.replicateApiKey,
-    required this.saveReplicateApiKey,
-  }) : super(key: key);
-
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  final _replicateApiKeyController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _replicateApiKeyController.text = widget.replicateApiKey;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            TextFormField(
-              controller: _replicateApiKeyController,
+            TextField(
+              controller: _videoController,
               decoration: const InputDecoration(
-                labelText: 'Replicate API Key',
+                labelText: 'Video File',
+                border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _promptController,
+              decoration: const InputDecoration(
+                labelText: 'Editing Instructions',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                widget.saveReplicateApiKey();
-                Navigator.pop(context);
-              },
-              child: const Text('Save'),
+              child: const Text('Upload and Process Video'),
+              onPressed: _uploadVideo,
+            ),
+            const SizedBox(height: 16),
+            LinearProgressIndicator(
+              value: _progress,
+            ),
+            const SizedBox(height: 16),
+            Text(_AgentsStatus),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              child: const Text('Download Video'),
+              onPressed: _downloadVideo,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              child: const Text('Coordinate Agents'),
+              onPressed: _coordinateAgents,
             ),
           ],
         ),
@@ -273,14 +252,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 ```
 
-In `android/app/src/main/AndroidManifest.xml`, add the following line inside the `<application>` tag:
-
 ```xml
-<meta-data android:name="flutterEmbedding" android:value="2" />
+<!-- android/app/src/main/AndroidManifest.xml -->
+<application
+    android:name="io.flutter.app.FlutterApplication"
+    android:label="youtube_video_editor"
+    android:icon="@mipmap/ic_launcher">
+    <meta-data android:name="flutterEmbedding" android:value="2" />
+    <activity
+        android:name=".MainActivity"
+        android:launchMode="singleTop"
+        android:theme="@style/LaunchTheme"
+        android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+        android:hardwareAccelerated="true"
+        android:windowSoftInputMode="adjustResize">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent-filter>
+    </activity>
+    <meta-data
+        android:name="io.flutter.embedding.android.NormalTheme"
+        android:resource="@style/NormalTheme"
+        />
+    <meta-data
+        android:name="io.flutter.embedding.android.SplashScreenDrawable"
+        android:resource="@drawable/launch_background"
+        />
+    <uses-permission android:name="android.permission.INTERNET" />
+</application>
 ```
 
-Also, add the following line to request internet permission:
+```groovy
+// android/app/build.gradle
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
 
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
+def flutterRoot = localProperties.getProperty('flutter.sdk')
+if (flutterRoot == null) {
+    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
+
+android {
+    compileSdkVersion 31
+
+    defaultConfig {
+        applicationId "com.example.youtube_video_editor"
+        minSdkVersion 21
+        targetSdkVersion 31
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+}
+```
+
+```groovy
+// android/build.gradle
+buildscript {
+    ext.kotlin_version = '1.6.10'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.2.2'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
 ```
