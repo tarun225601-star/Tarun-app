@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:convert';
 
@@ -17,21 +21,15 @@ class ViziaProApp extends StatelessWidget {
       title: 'Vizia AI Studio Pro',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
       home: const ViziaDashboardPage(),
     );
   }
-}
-
-class AgentTask {
-  final String name;
-  final String role;
-  bool isCompleted;
-  String status;
-
-  AgentTask({required this.name, required this.role, this.isCompleted = false, this.status = 'Pending'});
 }
 
 class ViziaDashboardPage extends StatefulWidget {
@@ -44,26 +42,42 @@ class ViziaDashboardPage extends StatefulWidget {
 class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
   final TextEditingController _promptController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
-  
+
   File? _selectedVideoFile;
   String _replicateApiKey = '';
   bool _isProcessing = false;
   String _currentLiveStatus = 'System idle. Ready for production.';
-  double _overallProgress = 0.0;
-  String? _outputVideoPath;
 
-  final List<AgentTask> _agents = [
-    AgentTask(name: 'Aura-01', role: 'Ingest & Codec Validator'),
-    AgentTask(name: 'Nexus-02', role: 'Prompt Semantic Interpreter'),
-    AgentTask(name: 'Optima-03', role: 'Frame Interpolation Engine'),
-    AgentTask(name: 'Chroma-04', role: 'Cinematic Color Grading Agent'),
-    AgentTask(name: 'Sonic-05', role: 'Audio Enhancer & Frequency Filter'),
-    AgentTask(name: 'Velo-06', role: 'Motion & Stabilization Expert'),
-    AgentTask(name: 'Cortex-07', role: 'Replicate API Payload Optimizer'),
-    AgentTask(name: 'Render-08', role: 'Cloud-to-Edge Stream Assembler'),
-    AgentTask(name: 'Shield-09', role: 'Quality Assurance & Artifact Checker'),
-    AgentTask(name: 'Export-10', role: 'Local Storage & Package Finisher'),
-  ];
+  // लाइव डाउनलोड प्रोग्रेस और परसेंटेज ट्रैक करने के लिए
+  double _downloadProgress = 0.0;
+  bool _isDownloading = false;
+  String? _savedFilePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedApiKey(); // ऐप खुलते ही परमानेंट सेव्ड API Key लोड करना
+  }
+
+  // SharedPreferences से API Key लोड करना (एक बार सेव होने पर हमेशा के लिए याद रखेगा)
+  Future<void> _loadSavedApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _replicateApiKey = prefs.getString('replicate_api_key') ?? '';
+      if (_replicateApiKey.isNotEmpty) {
+        _currentLiveStatus = 'API Key loaded from secure storage. Ready!';
+      }
+    });
+  }
+
+  // SharedPreferences में API Key हमेशा के लिए परमानेंट सेव करना
+  Future<void> _saveApiKeyPermanently(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('replicate_api_key', key.trim());
+    setState(() {
+      _replicateApiKey = key.trim();
+    });
+  }
 
   void _openSettings() {
     _apiKeyController.text = _replicateApiKey;
@@ -94,13 +108,12 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _replicateApiKey = _apiKeyController.text.trim();
-                });
+              onPressed: () async {
+                String newKey = _apiKeyController.text.trim();
+                await _saveApiKeyPermanently(newKey); // परमानेंट सेव कॉल
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('API Key saved successfully!')),
+                  const SnackBar(content: Text('API Key saved permanently!')),
                 );
               },
               child: const Text('Save Key'),
@@ -118,19 +131,17 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
     if (pickedFile != null) {
       setState(() {
         _selectedVideoFile = File(pickedFile.path);
-        _outputVideoPath = null;
+        _savedFilePath = null;
+        _downloadProgress = 0.0;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Loaded source video: ${pickedFile.name}')),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No video selected')),
-      );
     }
   }
 
-  void _executeProductionPipeline() async {
+  // असली क्लाउड प्रोसेस और Dio के साथ लाइव परसेंटेज डाउनलोड पाइपलाइन
+  Future<void> _executePipelineWithPercentage() async {
     if (_replicateApiKey.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please configure your Replicate API Key first!')),
@@ -141,7 +152,7 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
 
     if (_selectedVideoFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please pick a real source video from your device gallery!')),
+        const SnackBar(content: Text('Please pick a source video from your device gallery!')),
       );
       return;
     }
@@ -153,76 +164,147 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
       return;
     }
 
+    // स्टोरेज परमिशन्स लेना
+    var status = await Permission.storage.request();
+    if (!status.isGranted) {
+      await Permission.manageExternalStorage.request();
+    }
+
     setState(() {
       _isProcessing = true;
-      _overallProgress = 0.0;
-      for (var agent in _agents) {
-        agent.isCompleted = false;
-        agent.status = 'Pending';
-      }
+      _isDownloading = false;
+      _downloadProgress = 0.0;
+      _currentLiveStatus = 'Dispatching task to Replicate AI Cloud...';
     });
 
     try {
-      for (int i = 0; i < _agents.length; i++) {
-        setState(() {
-          _agents[i].status = 'Active & Processing';
-          _currentLiveStatus = 'Agent [${_agents[i].name} - ${_agents[i].role}] working...';
-          _overallProgress = (i + 1) / _agents.length;
+      var uri = Uri.parse('https://api.replicate.com/v1/predictions');
+      var request = http.Request('POST', uri)
+        ..headers.addAll({
+          'Authorization': 'Bearer $_replicateApiKey',
+          'Content-Type': 'application/json',
+        })
+        ..body = jsonEncode({
+          "version": "9f747673945c62801b13b84701c7d39294203e0e7a2b99480d46777a3d24268e",
+          "input": {
+            "prompt": _promptController.text.trim(),
+            "fps": 24
+          }
         });
 
-        if (i == 6) {
-          await _pingReplicateValidation();
-        } else {
-          await Future.delayed(const Duration(milliseconds: 700));
-        }
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
 
-        setState(() {
-          _agents[i].status = 'Completed';
-          _agents[i].isCompleted = true;
-        });
+      if (response.statusCode != 201 && response.statusCode != 200) {
+        throw Exception('Failed to start prediction: ${response.body}');
       }
 
+      var jsonResponse = jsonDecode(response.body);
+      String getUrl = jsonResponse['urls']?['get'];
+
+      setState(() => _currentLiveStatus = 'AI processing video on cloud. Please wait...');
+
+      bool isFinished = false;
+      String? outputVideoUrl;
+
+      while (!isFinished && getUrl != null) {
+        await Future.delayed(const Duration(seconds: 4));
+        var statusResponse = await http.get(
+          Uri.parse(getUrl),
+          headers: {'Authorization': 'Bearer $_replicateApiKey'},
+        );
+
+        if (statusResponse.statusCode == 200) {
+          var statusData = jsonDecode(statusResponse.body);
+          String processingStatus = statusData['status'];
+
+          if (processingStatus == 'succeeded') {
+            isFinished = true;
+            var output = statusData['output'];
+            if (output is List && output.isNotEmpty) {
+              outputVideoUrl = output[0];
+            } else if (output is String) {
+              outputVideoUrl = output;
+            }
+          } else if (processingStatus == 'failed' || processingStatus == 'canceled') {
+            throw Exception('Cloud processing failed: ${statusData['error']}');
+          } else {
+            setState(() => _currentLiveStatus = 'Cloud status: $processingStatus...');
+          }
+        }
+      }
+
+      if (outputVideoUrl == null) {
+        throw Exception('Could not get output video URL.');
+      }
+
+      // अब Dio पैकेज का उपयोग करके असली वीडियो डाउनलोड करेंगे और लाइव परसेंटेज दिखाएंगे
       setState(() {
         _isProcessing = false;
-        _currentLiveStatus = 'Production completed successfully by 10 Agents!';
-        _outputVideoPath = _selectedVideoFile!.path;
+        _isDownloading = true;
+        _currentLiveStatus = 'Downloading processed video...';
+      });
+
+      Directory? directory;
+      if (Platform.isAndroid) {
+        directory = Directory('/storage/emulated/0/Download');
+        if (!await directory.exists()) {
+          directory = await getExternalStorageDirectory();
+        }
+      } else {
+        directory = await getApplicationDocumentsDirectory();
+      }
+
+      final targetPath = '${directory!.path}/Vizia_Pro_${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+      Dio dio = Dio();
+      await dio.download(
+        outputVideoUrl,
+        targetPath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+              int percent = (_downloadProgress * 100).toInt();
+              _currentLiveStatus = 'Downloading: $percent% completed (${(received / 1024 / 1024).toStringAsFixed(1)} MB)';
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+        _savedFilePath = targetPath;
+        _currentLiveStatus = 'Video successfully downloaded and saved!';
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Video successfully processed and ready for download!')),
+        SnackBar(content: Text('डाउनलोड पूरा हुआ! फाइल यहाँ है: $targetPath')),
       );
 
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _currentLiveStatus = 'Error during execution: $e';
+        _isDownloading = false;
+        _currentLiveStatus = 'Error: $e';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pipeline Failed: $e')),
+        SnackBar(content: Text('Failed: $e')),
       );
     }
-  }
-
-  Future<void> _pingReplicateValidation() async {
-    try {
-      final response = await http.get(
-        Uri.parse('https://api.replicate.com/v1/account'),
-        headers: {'Authorization': 'Bearer $_replicateApiKey'},
-      );
-      if (response.statusCode != 200 && response.statusCode != 401) {
-        throw Exception('API connection issue code: ${response.statusCode}');
-      }
-    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vizia AI Studio Pro (10 Agents)'),
+        title: const Text('Vizia AI Studio Pro'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.vpn_key),
+            icon: Icon(
+              Icons.vpn_key,
+              color: _replicateApiKey.isEmpty ? Colors.redAccent : Colors.greenAccent,
+            ),
             tooltip: 'Configure Replicate API',
             onPressed: _openSettings,
           ),
@@ -233,6 +315,37 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // API Key Status Banner
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _replicateApiKey.isEmpty ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                border: Border.all(color: _replicateApiKey.isEmpty ? Colors.red : Colors.green),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _replicateApiKey.isEmpty ? Icons.warning : Icons.check_circle,
+                    color: _replicateApiKey.isEmpty ? Colors.redAccent : Colors.greenAccent,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _replicateApiKey.isEmpty 
+                        ? 'API Key Not Set! Tap the key icon on top right to save permanently.' 
+                        : 'API Key Saved Permanently (Ready for production)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _replicateApiKey.isEmpty ? Colors.redAccent : Colors.greenAccent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Card(
               elevation: 4,
               child: Padding(
@@ -240,17 +353,17 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('1. Real Source Video Input', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Text('1. Source Video Input', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Text(
-                      _selectedVideoFile == null ? 'No video selected from device' : 'Loaded: ${_selectedVideoFile!.path.split('/').last}',
+                      _selectedVideoFile == null ? 'No video selected' : 'Selected: ${_selectedVideoFile!.path.split('/').last}',
                       style: TextStyle(color: _selectedVideoFile == null ? Colors.redAccent : Colors.greenAccent, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: _isProcessing ? null : _pickRealVideo,
+                      onPressed: (_isProcessing || _isDownloading) ? null : _pickRealVideo,
                       icon: const Icon(Icons.video_library),
-                      label: const Text('Pick Video from Device Gallery'),
+                      label: const Text('Pick Video from Gallery'),
                     ),
                   ],
                 ),
@@ -264,13 +377,13 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('2. Master Editing Prompt Instruction', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Text('2. Master Editing Prompt', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _promptController,
                       maxLines: 3,
                       decoration: const InputDecoration(
-                        hintText: 'e.g., Upscale to 8K cinematic, stabilize motion, add dramatic color grading...',
+                        hintText: 'Enter instructions for AI video transformation...',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -285,40 +398,39 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              onPressed: _isProcessing ? null : _executeProductionPipeline,
+              onPressed: (_isProcessing || _isDownloading) ? null : _executePipelineWithPercentage,
               child: Text(
-                _isProcessing ? '10 Agents Processing Live...' : 'Deploy 10 AI Agents & Process Video',
+                _isProcessing ? 'Processing on Cloud...' : (_isDownloading ? 'Downloading... ${(_downloadProgress * 100).toInt()}%' : 'Run Pipeline & Download with %'),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 20),
-            if (_isProcessing || _overallProgress > 0) ...[
-              LinearProgressIndicator(value: _overallProgress),
+            if (_isProcessing || _isDownloading) ...[
+              LinearProgressIndicator(
+                value: _isDownloading ? _downloadProgress : null,
+                backgroundColor: Colors.white24,
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+              ),
               const SizedBox(height: 10),
-              Text(_currentLiveStatus, textAlign: TextAlign.center, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+              Text(
+                _currentLiveStatus,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              if (_isDownloading) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '${(_downloadProgress * 100).toStringAsFixed(1)}% Downloaded',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
               const SizedBox(height: 16),
+            ] else ...[
+              Text(_currentLiveStatus, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
             ],
-            const Text('Autonomous Agent Squad Live Status:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _agents.length,
-              itemBuilder: (context, index) {
-                final agent = _agents[index];
-                return ListTile(
-                  dense: true,
-                  leading: Icon(
-                    agent.isCompleted ? Icons.check_circle : (agent.status == 'Active & Processing' ? Icons.hourglass_top : Icons.radio_button_unchecked),
-                    color: agent.isCompleted ? Colors.green : (agent.status == 'Active & Processing' ? Colors.amber : Colors.grey),
-                  ),
-                  title: Text('${agent.name} - ${agent.role}', style: const TextStyle(fontWeight: FontWeight.w500)),
-                  trailing: Text(agent.status, style: TextStyle(color: agent.isCompleted ? Colors.green : Colors.grey, fontSize: 12)),
-                );
-              },
-            ),
             const SizedBox(height: 20),
-            if (_outputVideoPath != null) ...[
+            if (_savedFilePath != null) ...[
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -328,18 +440,11 @@ class _ViziaDashboardPageState extends State<ViziaDashboardPage> {
                 ),
                 child: Column(
                   children: [
-                    const Text('Production Finished Successfully!', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 10),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Video saved directly to device storage gallery!')),
-                        );
-                      },
-                      icon: const Icon(Icons.download),
-                      label: const Text('Save & Export to Device Storage'),
-                    ),
+                    const Text('Download 100% Completed Successfully!', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    Text('फाइल सेव हुई: \n$_savedFilePath', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                    const SizedBox(height: 8),
+                    const Text('अब आप अपने फोन के File Manager -> Download फोल्डर में वीडियो देख सकते हैं!', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.amberAccent)),
                   ],
                 ),
               ),
