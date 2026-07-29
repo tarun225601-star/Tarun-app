@@ -1,32 +1,17 @@
-name: Flutter Build
-
+name: Flutter APK Build
 on: [push]
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
         with:
-          node-version: "20.x"
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.16.9'
-
-      - name: Create Android Structure if missing
-        run: |
-          if [ ! -d "android" ]; then
-            flutter create . --org com.example --project-name ai_generated_app --platforms android
-          fi
-
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Build APK
-        run: flutter build apk --release
+          channel: 'stable'
+      - run: flutter pub get
+      - run: flutter build apk --release
