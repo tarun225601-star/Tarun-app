@@ -1,15 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="AI Video Editor"
+        android:label="AI App"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        
-        <!-- 👇 यह लाइन यहाँ पर पक्की होनी चाहिए -->
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true"
