@@ -1,200 +1,108 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const CalculatorApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+class CalculatorApp extends StatelessWidget {
+  const CalculatorApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Stopwatch and Timer',
-      theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
-        brightness: Brightness.dark,
-      ),
-      home: const MyHomePage(),
+    return const MaterialApp(
+      title: 'Calculator',
+      home: CalculatorPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key}) : super(key: key);
+class CalculatorPage extends StatefulWidget {
+  const CalculatorPage({Key? key}) : super(key: key);
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<CalculatorPage> createState() => _CalculatorPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _animation;
-  bool _isRunning = false;
-  bool _isTimerRunning = false;
-  int _stopwatchTime = 0;
-  int _timerTime = 0;
-  Timer? _stopwatchTimer;
-  Timer? _timer;
+class _CalculatorPageState extends State<CalculatorPage> {
+  String _expression = '';
+  String _result = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _animation = Tween<double>(begin: 0, end: 1).animate(_animationController);
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    _stopwatchTimer?.cancel();
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _startStopwatch() {
-    _stopwatchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _stopwatchTime++;
-      });
-    });
+  void _onPressed(String value) {
     setState(() {
-      _isRunning = true;
-    });
-  }
-
-  void _stopStopwatch() {
-    _stopwatchTimer?.cancel();
-    setState(() {
-      _isRunning = false;
-    });
-  }
-
-  void _resetStopwatch() {
-    _stopwatchTimer?.cancel();
-    setState(() {
-      _isRunning = false;
-      _stopwatchTime = 0;
-    });
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _timerTime--;
-        if (_timerTime <= 0) {
-          _timer?.cancel();
-          _playAlarm();
+      if (value == '=') {
+        try {
+          _result = _calculate(_expression).toString();
+        } catch (e) {
+          _result = 'Error';
         }
-      });
-    });
-    setState(() {
-      _isTimerRunning = true;
-    });
-  }
-
-  void _stopTimer() {
-    _timer?.cancel();
-    setState(() {
-      _isTimerRunning = false;
+      } else if (value == 'C') {
+        _expression = '';
+        _result = '';
+      } else {
+        _expression += value;
+      }
     });
   }
 
-  void _resetTimer() {
-    _timer?.cancel();
-    setState(() {
-      _isTimerRunning = false;
-      _timerTime = 0;
-    });
-  }
-
-  void _playAlarm() {
-    // Play alarm sound
-    // You can use a package like audioplayers to play a sound
+  double _calculate(String expression) {
+    return Function.apply(
+      (String x) => double.parse(x),
+      [expression.replaceAll('+', ' + ').replaceAll('-', ' - ').replaceAll('*', ' * ').replaceAll('/', ' / ').replaceAll(' ', '')],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Stopwatch and Timer'),
+        title: const Text('Calculator'),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            Expanded(
+              child: Container(
+                alignment: Alignment.bottomRight,
+                child: Text(
+                  _expression,
+                  style: const TextStyle(fontSize: 24),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: Container(
+                alignment: Alignment.bottomRight,
+                child: Text(
+                  _result,
+                  style: const TextStyle(fontSize: 48),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            GridView.count(
+              shrinkWrap: true,
+              crossAxisCount: 4,
               children: [
-                ElevatedButton(
-                  onPressed: _isRunning ? _stopStopwatch : _startStopwatch,
-                  child: Text(_isRunning ? 'Stop' : 'Start'),
-                ),
-                ElevatedButton(
-                  onPressed: _resetStopwatch,
-                  child: const Text('Reset'),
-                ),
+                _buildButton('7', _onPressed),
+                _buildButton('8', _onPressed),
+                _buildButton('9', _onPressed),
+                _buildButton('/', _onPressed),
+                _buildButton('4', _onPressed),
+                _buildButton('5', _onPressed),
+                _buildButton('6', _onPressed),
+                _buildButton('*', _onPressed),
+                _buildButton('1', _onPressed),
+                _buildButton('2', _onPressed),
+                _buildButton('3', _onPressed),
+                _buildButton('-', _onPressed),
+                _buildButton('0', _onPressed),
+                _buildButton('.', _onPressed),
+                _buildButton('=', _onPressed),
+                _buildButton('C', _onPressed),
+                _buildButton('+', _onPressed),
               ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              _formatTime(_stopwatchTime),
-              style: const TextStyle(fontSize: 48),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: _isTimerRunning ? _stopTimer : _startTimer,
-                  child: Text(_isTimerRunning ? 'Stop' : 'Start'),
-                ),
-                ElevatedButton(
-                  onPressed: _resetTimer,
-                  child: const Text('Reset'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _timerTime = 10;
-                    });
-                  },
-                  child: const Text('10s'),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _timerTime = 30;
-                    });
-                  },
-                  child: const Text('30s'),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _timerTime = 60;
-                    });
-                  },
-                  child: const Text('1m'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              _formatTime(_timerTime),
-              style: const TextStyle(fontSize: 48),
             ),
           ],
         ),
@@ -202,10 +110,13 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     );
   }
 
-  String _formatTime(int time) {
-    int hours = time ~/ 3600;
-    int minutes = (time % 3600) ~/ 60;
-    int seconds = time % 60;
-    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  ElevatedButton _buildButton(String text, void Function(String) onPressed) {
+    return ElevatedButton(
+      onPressed: () => onPressed(text),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 24),
+      ),
+    );
   }
 }
