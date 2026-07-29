@@ -9,143 +9,191 @@ class CalculatorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Simple Calculator',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const CalculatorPage(),
+    return const MaterialApp(
+      title: 'Calculator App',
+      home: CalculatorHomePage(),
     );
   }
 }
 
-class CalculatorPage extends StatefulWidget {
-  const CalculatorPage({Key? key}) : super(key: key);
+class CalculatorHomePage extends StatefulWidget {
+  const CalculatorHomePage({Key? key}) : super(key: key);
 
   @override
-  State<CalculatorPage> createState() => _CalculatorPageState();
+  State<CalculatorHomePage> createState() => _CalculatorHomePageState();
 }
 
-class _CalculatorPageState extends State<CalculatorPage> {
-  String _expression = '';
-  String _result = '';
+class _CalculatorHomePageState extends State<CalculatorHomePage> {
+  final TextEditingController _textController = TextEditingController();
+  final List<String> _history = [];
+  String _currentExpression = '';
 
-  void _onPressed(String value) {
+  void _onButtonPressed(String value) {
     setState(() {
       if (value == 'C') {
-        _expression = '';
-        _result = '';
+        _currentExpression = '';
+        _textController.clear();
       } else if (value == '=') {
         try {
-          _result = _calculate(_expression);
+          final result = _calculate(_currentExpression);
+          _history.add('$_currentExpression = $result');
+          _currentExpression = result.toString();
+          _textController.text = _currentExpression;
         } catch (e) {
-          _result = 'Error';
+          _textController.text = 'Error';
         }
       } else {
-        _expression += value;
+        _currentExpression += value;
+        _textController.text = _currentExpression;
       }
     });
   }
 
-  String _calculate(String expression) {
-    return expression
-        .replaceAll('Ã', '*')
-        .replaceAll('Ã·', '/')
-        .replaceAll('â', '-')
-        .replaceAll(' ', '')
-        .splitMapJoin(
-          RegExp(r'(\d+|\+|-|\*|/|\(|\))'),
-          onMatch: (m) => m.group(0)!,
-          onNonMatch: (n) => '',
-        );
-  }
-
-  String _evaluate(String expression) {
-    try {
-      return (num.parse(_calculate(expression))).toString();
-    } catch (e) {
-      return 'Error';
-    }
+  double _calculate(String expression) {
+    return Function.apply(
+      (String exp) => double.parse(
+        exp
+            .replaceAll('+', ' + ')
+            .replaceAll('-', ' - ')
+            .replaceAll('*', ' * ')
+            .replaceAll('/', ' / ')
+            .replaceAll(' ', ' '),
+      ),
+      [expression],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Simple Calculator'),
+        title: const Text('Calculator App'),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _expression,
-                      style: const TextStyle(fontSize: 24),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      _result,
-                      style: const TextStyle(fontSize: 48),
-                    ),
-                  ),
-                ],
-              ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _textController,
+              readOnly: true,
+              style: const TextStyle(fontSize: 24),
             ),
-          ),
-          Expanded(
-            flex: 2,
-            child: GridView.count(
+            const SizedBox(height: 16),
+            GridView.count(
+              shrinkWrap: true,
               crossAxisCount: 4,
-              childAspectRatio: 1.2,
+              childAspectRatio: 1,
               children: [
-                _button('7', _onPressed),
-                _button('8', _onPressed),
-                _button('9', _onPressed),
-                _button('Ã·', _onPressed),
-                _button('4', _onPressed),
-                _button('5', _onPressed),
-                _button('6', _onPressed),
-                _button('Ã', _onPressed),
-                _button('1', _onPressed),
-                _button('2', _onPressed),
-                _button('3', _onPressed),
-                _button('â', _onPressed),
-                _button('0', _onPressed),
-                _button('.', _onPressed),
-                _button('=', _onPressed),
-                _button('C', _onPressed),
-                _button('+', _onPressed),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '7',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '8',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '9',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '/',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '4',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '5',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '6',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '*',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '1',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '2',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '3',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '-',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '0',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '.',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: 'C',
+                ),
+                CalculatorButton(
+                  onPressed: _onButtonPressed,
+                  value: '+',
+                ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _history.add(_textController.text);
+                  _textController.clear();
+                  _currentExpression = '';
+                });
+              },
+              child: const Text('Clear History'),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _history.length,
+                itemBuilder: (context, index) {
+                  return Text(_history[_history.length - 1 - index]);
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _button(String value, Function onPressed) {
-    return GestureDetector(
-      onTap: () => onPressed(value),
-      child: Container(
-        decoration: const BoxDecoration(
-          border: Border(
-            top: BorderSide(color: Colors.grey),
-            bottom: BorderSide(color: Colors.grey),
-            left: BorderSide(color: Colors.grey),
-            right: BorderSide(color: Colors.grey),
-          ),
-        ),
-        child: Center(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 24),
-          ),
-        ),
+class CalculatorButton extends StatelessWidget {
+  final Function(String) onPressed;
+  final String value;
+
+  const CalculatorButton({
+    Key? key,
+    required this.onPressed,
+    required this.value,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: () => onPressed(value),
+      child: Text(
+        value,
+        style: const TextStyle(fontSize: 24),
       ),
     );
   }
