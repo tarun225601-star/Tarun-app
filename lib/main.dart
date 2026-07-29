@@ -1,9 +1,9 @@
 ```dart
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
 
 void main() {
   runApp(const MyApp());
@@ -14,12 +14,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       title: 'Media Editor',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const SettingsScreen(),
+      home: SettingsScreen(),
     );
   }
 }
@@ -82,117 +79,118 @@ class PromptScreen extends StatefulWidget {
 class _PromptScreenState extends State<PromptScreen> {
   final _promptController = TextEditingController();
   File? _imageFile;
-  String _imageUrl = '';
-
-  Future<void> _uploadImage() async {
-    final pickedFile = await FilePicker.platform.pickFile();
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path!);
-        _imageUrl = _imageFile!.path;
-      });
-    }
-  }
 
   Future<void> _sendPrompt() async {
     final prefs = await SharedPreferences.getInstance();
     final apiKey = prefs.getString('apiKey');
-    if (apiKey != null) {
-      final response = await http.post(
-        Uri.parse('https://api.replicate.com/v1/predictions'),
+    if (apiKey == null) {
+      return;
+    }
+
+    final model = 'stabilityai/stable-diffusion-2';
+    final version = 'latest';
+    final prompt = _promptController.text;
+    final negativePrompt = '';
+    final width = 512;
+    final height = 512;
+    final numInferenceSteps = 50;
+
+    final requestBody = jsonEncode({
+      'version': version,
+      'input': {
+        'prompt': prompt,
+        'negative_prompt': negativePrompt,
+        'width': width,
+        'height': height,
+        'num_inference_steps': numInferenceSteps,
+      },
+    });
+
+    final response = await http.post(
+      Uri.parse('https://api.replicate.com/v1/predictions'),
+      headers: {
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json',
+      },
+      body: requestBody,
+    );
+
+    if (response.statusCode == 201) {
+      final predictionId = response.json()['id'];
+      _pollPrediction(predictionId, apiKey);
+    } else if (response.statusCode == 401) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unauthorized')),
+      );
+    } else if (response.statusCode == 422) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid request')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error ${response.statusCode}')),
+      );
+    }
+  }
+
+  Future<void> _pollPrediction(String predictionId, String apiKey) async {
+    while (true) {
+      final response = await http.get(
+        Uri.parse('https://api.replicate.com/v1/predictions/$predictionId'),
         headers: {
           'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
         },
-        body: jsonEncode({
-          'version': 'latest',
-          'input': {
-            'prompt': _promptController.text,
-            'negative_prompt': '',
-            'image': _imageUrl,
-          },
-        }),
       );
-      if (response.statusCode == 201) {
-        final predictionId = response.json()['id'];
-        _pollPrediction(predictionId);
-      } else {
-        _showErrorDialog(response.statusCode);
-      }
-    }
-  }
 
-  Future<void> _pollPrediction(String predictionId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final apiKey = prefs.getString('apiKey');
-    if (apiKey != null) {
-      while (true) {
-        final response = await http.get(
-          Uri.parse('https://api.replicate.com/v1/predictions/$predictionId'),
-          headers: {
-            'Authorization': 'Bearer $apiKey',
-          },
-        );
-        if (response.statusCode == 200) {
-          final status = response.json()['status'];
-          if (status == 'succeeded') {
-            final output = response.json()['output'];
-            _showOutputDialog(output);
-            break;
-          } else if (status == 'failed') {
-            _showErrorDialog(response.statusCode);
-            break;
-          }
-        } else {
-          _showErrorDialog(response.statusCode);
+      if (response.statusCode == 200) {
+        final status = response.json()['status'];
+        if (status == 'succeeded') {
+          final output = response.json()['output'];
+          _showOutput(output);
+          break;
+        } else if (status == 'failed') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Prediction failed')),
+          );
           break;
         }
-        await Future.delayed(const Duration(seconds: 1));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error ${response.statusCode}')),
+        );
+        break;
       }
+
+      await Future.delayed(const Duration(seconds: 5));
     }
   }
 
-  Future<void> _showErrorDialog(int statusCode) async {
-    await showDialog(
+  void _showOutput(String output) {
+    showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Error'),
-          content: Text('Error $statusCode'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: const Text('Output'),
+        content: Image.network(output),
+      ),
     );
   }
 
-  Future<void> _showOutputDialog(String output) async {
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Output'),
-          content: Text(output),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
+  Future<void> _uploadImage() async {
+    final pickedFile = await FilePicker.platform.pickFiles(
+      type: FileType.image,
     );
+
+    if (pickedFile != null) {
+      _imageFile = File(pickedFile.files.first.path!);
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Prompt'),
+        title: const Text('Prompt Screen'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -207,14 +205,18 @@ class _PromptScreenState extends State<PromptScreen> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
+              onPressed: _sendPrompt,
+              child: const Text('Send Prompt'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
               onPressed: _uploadImage,
               child: const Text('Upload Image'),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _sendPrompt,
-              child: const Text('Send Prompt'),
-            ),
+            _imageFile != null
+                ? Image.file(_imageFile!)
+                : const Text('No image uploaded'),
           ],
         ),
       ),
