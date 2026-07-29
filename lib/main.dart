@@ -10,111 +10,114 @@ class CalculatorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
-      title: 'Calculator',
-      home: CalculatorPage(),
+      title: 'Calculator App',
+      home: CalculatorHome(),
     );
   }
 }
 
-class CalculatorPage extends StatefulWidget {
-  const CalculatorPage({Key? key}) : super(key: key);
+class CalculatorHome extends StatefulWidget {
+  const CalculatorHome({Key? key}) : super(key: key);
 
   @override
-  State<CalculatorPage> createState() => _CalculatorPageState();
+  State<CalculatorHome> createState() => _CalculatorHomeState();
 }
 
-class _CalculatorPageState extends State<CalculatorPage> {
-  String _expression = '';
+class _CalculatorHomeState extends State<CalculatorHome> {
+  String _equation = '';
   String _result = '';
 
-  void _onPressed(String value) {
+  void _onButtonPressed(String value) {
     setState(() {
-      if (value == '=') {
+      if (value == 'C') {
+        _equation = '';
+        _result = '';
+      } else if (value == '=') {
         try {
-          _result = _calculate(_expression).toString();
+          _result = _calculate(_equation).toString();
         } catch (e) {
           _result = 'Error';
         }
-      } else if (value == 'C') {
-        _expression = '';
-        _result = '';
       } else {
-        _expression += value;
+        _equation += value;
       }
     });
   }
 
-  double _calculate(String expression) {
-    return Function.apply(
-      (String x) => double.parse(x),
-      [expression.replaceAll('+', ' + ').replaceAll('-', ' - ').replaceAll('*', ' * ').replaceAll('/', ' / ').replaceAll(' ', '')],
-    );
+  double _calculate(String equation) {
+    try {
+      return double.parse(equation);
+    } catch (e) {
+      return 0;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Calculator'),
+        title: const Text('Calculator App'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Expanded(
-              child: Container(
-                alignment: Alignment.bottomRight,
-                child: Text(
-                  _expression,
-                  style: const TextStyle(fontSize: 24),
-                ),
+      body: Column(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Text(
+                    _equation,
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                  Text(
+                    _result,
+                    style: const TextStyle(fontSize: 48),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: Container(
-                alignment: Alignment.bottomRight,
-                child: Text(
-                  _result,
-                  style: const TextStyle(fontSize: 48),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            GridView.count(
-              shrinkWrap: true,
+          ),
+          Expanded(
+            flex: 3,
+            child: GridView.count(
+              primary: false,
               crossAxisCount: 4,
+              childAspectRatio: 1.2,
               children: [
-                _buildButton('7', _onPressed),
-                _buildButton('8', _onPressed),
-                _buildButton('9', _onPressed),
-                _buildButton('/', _onPressed),
-                _buildButton('4', _onPressed),
-                _buildButton('5', _onPressed),
-                _buildButton('6', _onPressed),
-                _buildButton('*', _onPressed),
-                _buildButton('1', _onPressed),
-                _buildButton('2', _onPressed),
-                _buildButton('3', _onPressed),
-                _buildButton('-', _onPressed),
-                _buildButton('0', _onPressed),
-                _buildButton('.', _onPressed),
-                _buildButton('=', _onPressed),
-                _buildButton('C', _onPressed),
-                _buildButton('+', _onPressed),
+                _buildButton('7', _onButtonPressed),
+                _buildButton('8', _onButtonPressed),
+                _buildButton('9', _onButtonPressed),
+                _buildButton('/', _onButtonPressed),
+                _buildButton('4', _onButtonPressed),
+                _buildButton('5', _onButtonPressed),
+                _buildButton('6', _onButtonPressed),
+                _buildButton('*', _onButtonPressed),
+                _buildButton('1', _onButtonPressed),
+                _buildButton('2', _onButtonPressed),
+                _buildButton('3', _onButtonPressed),
+                _buildButton('-', _onButtonPressed),
+                _buildButton('0', _onButtonPressed),
+                _buildButton('.', _onButtonPressed),
+                _buildButton('=', _onButtonPressed),
+                _buildButton('+', _onButtonPressed),
+                _buildButton('C', _onButtonPressed),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  ElevatedButton _buildButton(String text, void Function(String) onPressed) {
+  ElevatedButton _buildButton(String label, void Function(String) onPressed) {
     return ElevatedButton(
-      onPressed: () => onPressed(text),
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size(80, 80),
+      ),
+      onPressed: () => onPressed(label),
       child: Text(
-        text,
+        label,
         style: const TextStyle(fontSize: 24),
       ),
     );
