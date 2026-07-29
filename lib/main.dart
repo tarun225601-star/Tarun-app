@@ -1,307 +1,223 @@
-Here's a professional notes and tasks app in Flutter. The app will have the following features:
-- User can create, read, update, and delete notes
-- User can create, read, update, and delete tasks
-- User can mark tasks as completed
-- User can filter notes and tasks by title
-
 ```dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const CalculatorApp());
 }
 
-class Note {
-  String title;
-  String content;
-  DateTime createdAt;
-
-  Note({required this.title, required this.content, required this.createdAt});
-}
-
-class Task {
-  String title;
-  String content;
-  bool isCompleted;
-  DateTime createdAt;
-
-  Task({required this.title, required this.content, required this.isCompleted, required this.createdAt});
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+class CalculatorApp extends StatelessWidget {
+  const CalculatorApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Notes and Tasks',
+      title: 'Simple Calculator',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(),
+      home: const CalculatorPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key}) : super(key: key);
+class CalculatorPage extends StatefulWidget {
+  const CalculatorPage({Key? key}) : super(key: key);
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<CalculatorPage> createState() => _CalculatorPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  List<Note> _notes = [];
-  List<Task> _tasks = [];
-  final _noteController = TextEditingController();
-  final _noteContentController = TextEditingController();
-  final _taskController = TextEditingController();
-  final _taskContentController = TextEditingController();
-  bool _isNoteDialogOpen = false;
-  bool _isTaskDialogOpen = false;
-
-  void _addNote() {
-    if (_noteController.text.isNotEmpty && _noteContentController.text.isNotEmpty) {
-      setState(() {
-        _notes.add(Note(
-          title: _noteController.text,
-          content: _noteContentController.text,
-          createdAt: DateTime.now(),
-        ));
-        _noteController.clear();
-        _noteContentController.clear();
-      });
-    }
-  }
-
-  void _addTask() {
-    if (_taskController.text.isNotEmpty && _taskContentController.text.isNotEmpty) {
-      setState(() {
-        _tasks.add(Task(
-          title: _taskController.text,
-          content: _taskContentController.text,
-          isCompleted: false,
-          createdAt: DateTime.now(),
-        ));
-        _taskController.clear();
-        _taskContentController.clear();
-      });
-    }
-  }
-
-  void _deleteNote(int index) {
-    setState(() {
-      _notes.removeAt(index);
-    });
-  }
-
-  void _deleteTask(int index) {
-    setState(() {
-      _tasks.removeAt(index);
-    });
-  }
-
-  void _toggleTaskCompletion(int index) {
-    setState(() {
-      _tasks[index].isCompleted = !_tasks[index].isCompleted;
-    });
-  }
+class _CalculatorPageState extends State<CalculatorPage> {
+  final _textController = TextEditingController();
+  double _num1 = 0;
+  double _num2 = 0;
+  String _operator = '';
+  String _result = '';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notes and Tasks'),
+        title: const Text('Simple Calculator'),
       ),
-      body: TabBarView(
-        children: [
-          _buildNotesTab(),
-          _buildTasksTab(),
-        ],
-      ),
-      bottomNavigationBar: TabBar(
-        tabs: [
-          Tab(icon: Icon(Icons.note), text: 'Notes'),
-          Tab(icon: Icon(Icons.task), text: 'Tasks'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotesTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _isNoteDialogOpen = true;
-                    });
-                  },
-                  child: Text('Add Note'),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Search notes',
-                  ),
-                  onChanged: (text) {
-                    setState(() {
-                      _notes = _notes
-                          .where((note) => note.title.toLowerCase().contains(text.toLowerCase()))
-                          .toList();
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _isNoteDialogOpen
-              ? _buildNoteDialog()
-              : _notes.isEmpty
-                  ? Center(child: Text('No notes found'))
-                  : ListView.builder(
-                      itemCount: _notes.length,
-                      itemBuilder: (context, index) {
-                        return ListTile(
-                          title: Text(_notes[index].title),
-                          subtitle: Text(_notes[index].content),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(Icons.delete),
-                                onPressed: () {
-                                  _deleteNote(index);
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTasksTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _isTaskDialogOpen = true;
-                    });
-                  },
-                  child: Text('Add Task'),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Search tasks',
-                  ),
-                  onChanged: (text) {
-                    setState(() {
-                      _tasks = _tasks
-                          .where((task) => task.title.toLowerCase().contains(text.toLowerCase()))
-                          .toList();
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _isTaskDialogOpen
-              ? _buildTaskDialog()
-              : _tasks.isEmpty
-                  ? Center(child: Text('No tasks found'))
-                  : ListView.builder(
-                      itemCount: _tasks.length,
-                      itemBuilder: (context, index) {
-                        return ListTile(
-                          title: Text(_tasks[index].title),
-                          subtitle: Text(_tasks[index].content),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Checkbox(
-                                value: _tasks[index].isCompleted,
-                                onChanged: (value) {
-                                  _toggleTaskCompletion(index);
-                                },
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.delete),
-                                onPressed: () {
-                                  _deleteTask(index);
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNoteDialog() {
-    return Dialog(
-      child: Padding(
+      body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: _noteController,
-              decoration: InputDecoration(
+              controller: _textController,
+              readOnly: true,
+              style: const TextStyle(fontSize: 24),
+              decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Note title',
               ),
             ),
-            SizedBox(height: 16),
-            TextField(
-              controller: _noteContentController,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Note content',
-              ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '7';
+                    });
+                  },
+                  child: const Text('7'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '8';
+                    });
+                  },
+                  child: const Text('8'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '9';
+                    });
+                  },
+                  child: const Text('9'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '/';
+                    });
+                  },
+                  child: const Text('/'),
+                ),
+              ],
             ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _addNote,
-              child: Text('Add Note'),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '4';
+                    });
+                  },
+                  child: const Text('4'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '5';
+                    });
+                  },
+                  child: const Text('5'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '6';
+                    });
+                  },
+                  child: const Text('6'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '*';
+                    });
+                  },
+                  child: const Text('*'),
+                ),
+              ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '1';
+                    });
+                  },
+                  child: const Text('1'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '2';
+                    });
+                  },
+                  child: const Text('2'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '3';
+                    });
+                  },
+                  child: const Text('3'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '-';
+                    });
+                  },
+                  child: const Text('-'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '0';
+                    });
+                  },
+                  child: const Text('0'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '.';
+                    });
+                  },
+                  child: const Text('.'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _textController.text += '+';
+                    });
+                  },
+                  child: const Text('+'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _calculateResult();
+                    });
+                  },
+                  child: const Text('='),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
                 setState(() {
-                  _isNoteDialogOpen = false;
+                  _textController.clear();
+                  _result = '';
                 });
               },
-              child: Text('Cancel'),
+              child: const Text('Clear'),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _result,
+              style: const TextStyle(fontSize: 24),
             ),
           ],
         ),
@@ -309,46 +225,37 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildTaskDialog() {
-    return Dialog(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _taskController,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Task title',
-              ),
-            ),
-            SizedBox(height: 16),
-            TextField(
-              controller: _taskContentController,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Task content',
-              ),
-            ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _addTask,
-              child: Text('Add Task'),
-            ),
-            SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _isTaskDialogOpen = false;
-                });
-              },
-              child: Text('Cancel'),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _calculateResult() {
+    try {
+      _result = _calculate(_textController.text);
+      _textController.text = _result;
+    } catch (e) {
+      _result = 'Error';
+    }
+  }
+
+  String _calculate(String equation) {
+    final List<String> parts = equation.split(RegExp(r'([+*/-])'));
+    _num1 = double.parse(parts[0]);
+    _operator = parts[1];
+    _num2 = double.parse(parts[2]);
+
+    switch (_operator) {
+      case '+':
+        return (_num1 + _num2).toString();
+      case '-':
+        return (_num1 - _num2).toString();
+      case '*':
+        return (_num1 * _num2).toString();
+      case '/':
+        if (_num2 != 0) {
+          return (_num1 / _num2).toString();
+        } else {
+          throw Exception('Cannot divide by zero');
+        }
+      default:
+        throw Exception('Invalid operator');
+    }
   }
 }
 ```
