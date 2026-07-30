@@ -19,4 +19,6 @@ jobs:
           channel: 'stable'
           
       - run: flutter pub get
-      - run: flutter build apk --release --no-pub
+      - run: rm -rf android ios windows linux macos
+      - run: flutter create . --platforms=android
+      - run: flutter build apk --release
