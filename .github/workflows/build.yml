@@ -19,4 +19,5 @@ jobs:
           channel: 'stable'
           
       - run: flutter pub get
+      - run: dart pub upgrade --null-safety
       - run: flutter build apk --release
