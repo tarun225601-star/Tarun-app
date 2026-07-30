@@ -19,5 +19,4 @@ jobs:
           channel: 'stable'
           
       - run: flutter pub get
-      - run: flutter create . --platforms=android --org com.vizia.marketplace
       - run: flutter build apk --release
